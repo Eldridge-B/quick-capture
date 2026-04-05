@@ -283,54 +283,50 @@ async function handleDictateWebSocket(
   let deepgram: WebSocket | null = null;
   let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
 
+  // In Cloudflare Workers, outbound WebSocket connections use fetch() with Upgrade header
   try {
-    // Connect to Deepgram using subprotocol auth
-    deepgram = new WebSocket(dgUrl, ["token", env.DEEPGRAM_API_KEY]);
-
-    // Wait for Deepgram connection to open
-    deepgram.addEventListener("open", () => {
-      // Send KeepAlive every 8 seconds
-      keepAliveInterval = setInterval(() => {
-        if (deepgram && deepgram.readyState === WebSocket.READY_STATE_OPEN) {
-          deepgram.send(JSON.stringify({ type: "KeepAlive" }));
-        }
-      }, 8000);
+    const dgRes = await fetch(dgUrl.replace("wss://", "https://"), {
+      headers: {
+        Upgrade: "websocket",
+        Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
+      },
     });
+
+    deepgram = (dgRes as any).webSocket as WebSocket;
+    if (!deepgram) {
+      throw new Error("Deepgram did not return a WebSocket");
+    }
+    deepgram.accept();
+
+    // Send KeepAlive every 8 seconds
+    keepAliveInterval = setInterval(() => {
+      try {
+        deepgram?.send(JSON.stringify({ type: "KeepAlive" }));
+      } catch { /* ignore */ }
+    }, 8000);
 
     // Deepgram → client: forward transcription results
     deepgram.addEventListener("message", (event) => {
       try {
         server.send(typeof event.data === "string" ? event.data : event.data);
-      } catch {
-        // Client may have disconnected
-      }
+      } catch { /* client may have disconnected */ }
     });
 
-    // Deepgram connection error
-    deepgram.addEventListener("error", (event) => {
-      console.error("Deepgram WebSocket error:", event);
+    deepgram.addEventListener("error", () => {
       try {
         server.send(JSON.stringify({ type: "error", message: "Deepgram connection error" }));
-      } catch {
-        // Client may have disconnected
-      }
+      } catch { /* ignore */ }
       cleanup();
     });
 
-    // Deepgram closed
-    deepgram.addEventListener("close", () => {
-      cleanup();
-    });
+    deepgram.addEventListener("close", () => cleanup());
 
-    // Client → Deepgram: forward audio data
+    // Client → Deepgram: forward audio and control messages
     server.addEventListener("message", (event) => {
-      if (!deepgram || deepgram.readyState !== WebSocket.READY_STATE_OPEN) {
-        return;
-      }
+      if (!deepgram) return;
 
       const data = event.data;
 
-      // Check for text control messages
       if (typeof data === "string") {
         try {
           const msg = JSON.parse(data);
@@ -338,41 +334,26 @@ async function handleDictateWebSocket(
             deepgram.send(JSON.stringify({ type: "CloseStream" }));
             return;
           }
-        } catch {
-          // Not JSON, ignore
-        }
+        } catch { /* not JSON */ }
       }
 
-      // Forward binary audio data
       deepgram.send(data);
     });
 
-    // Client disconnected
     server.addEventListener("close", () => {
-      // Send CloseStream to Deepgram before cleaning up
-      if (deepgram && deepgram.readyState === WebSocket.READY_STATE_OPEN) {
-        try {
-          deepgram.send(JSON.stringify({ type: "CloseStream" }));
-        } catch {
-          // Already closing
-        }
-      }
+      try {
+        deepgram?.send(JSON.stringify({ type: "CloseStream" }));
+      } catch { /* ignore */ }
       cleanup();
     });
 
-    server.addEventListener("error", () => {
-      cleanup();
-    });
+    server.addEventListener("error", () => cleanup());
   } catch (err: any) {
     console.error("Failed to connect to Deepgram:", err);
     try {
-      server.send(
-        JSON.stringify({ type: "error", message: `Failed to connect to Deepgram: ${err.message || "Unknown error"}` })
-      );
+      server.send(JSON.stringify({ type: "error", message: `Deepgram unavailable: ${err.message}` }));
       server.close(1011, "Deepgram connection failed");
-    } catch {
-      // Best effort
-    }
+    } catch { /* ignore */ }
   }
 
   function cleanup() {
@@ -380,30 +361,12 @@ async function handleDictateWebSocket(
       clearInterval(keepAliveInterval);
       keepAliveInterval = null;
     }
-    if (deepgram) {
-      try {
-        if (deepgram.readyState === WebSocket.READY_STATE_OPEN) {
-          deepgram.close();
-        }
-      } catch {
-        // Already closed
-      }
-      deepgram = null;
-    }
-    try {
-      if (server.readyState === WebSocket.READY_STATE_OPEN) {
-        server.close();
-      }
-    } catch {
-      // Already closed
-    }
+    try { deepgram?.close(); } catch { /* ignore */ }
+    deepgram = null;
+    try { server.close(); } catch { /* ignore */ }
   }
 
-  // Return the client end of the WebSocket pair
-  return new Response(null, {
-    status: 101,
-    webSocket: client,
-  });
+  return new Response(null, { status: 101, webSocket: client });
 }
 
 // ── Image storage ───────────────────────────────────────────
