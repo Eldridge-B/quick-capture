@@ -26,6 +26,7 @@ import TagChips, { CaptureTag, incrementTagUsage } from "@/components/TagChips";
 import AttachmentBar, { Attachment } from "@/components/AttachmentBar";
 import ActionBar from "@/components/ActionBar";
 import Tooltip from "@/components/Tooltip";
+import Waveform from "@/components/Waveform";
 import {
   submitCapture,
   submitMultiCapture,
@@ -457,14 +458,7 @@ export default function CaptureScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>capture</Text>
           {/* Status badges */}
-          {dictating && (
-            <View style={styles.recordingBadge}>
-              <Animated.View style={[styles.recordingDot, { backgroundColor: colors.accent.primary }, pulseStyle]} />
-              <Text style={[styles.recordingText, { color: colors.accent.primary }]}>
-                {dictationState === "connecting" ? "connecting..." : "listening"}
-              </Text>
-            </View>
-          )}
+          {dictating && <Waveform active={dictationState === "listening"} />}
           {recording && !dictating && (
             <View style={styles.recordingBadge}>
               <Animated.View style={[styles.recordingDot, pulseStyle]} />
