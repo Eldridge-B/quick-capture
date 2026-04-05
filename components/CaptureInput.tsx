@@ -7,6 +7,9 @@ interface CaptureInputProps {
   onChangeText: (text: string) => void;
   placeholder?: string;
   ref?: React.Ref<TextInput>;
+  editable?: boolean;
+  interimText?: string;
+  onCursorChange?: (pos: { start: number; end: number }) => void;
 }
 
 export default function CaptureInput({
@@ -14,9 +17,17 @@ export default function CaptureInput({
   onChangeText,
   placeholder,
   ref,
+  editable,
+  interimText,
+  onCursorChange,
 }: CaptureInputProps) {
   const [focused, setFocused] = useState(false);
   const charCount = value.length;
+
+  const handleSelectionChange = (e: any) => {
+    const { start, end } = e.nativeEvent.selection;
+    onCursorChange?.({ start, end });
+  };
 
   return (
     <View style={styles.container}>
@@ -34,7 +45,12 @@ export default function CaptureInput({
         autoFocus
         selectionColor={colors.accent.primary}
         cursorColor={colors.accent.primary}
+        onSelectionChange={handleSelectionChange}
+        editable={editable !== false}
       />
+      {interimText ? (
+        <Text style={styles.interimText}>{interimText}</Text>
+      ) : null}
       {charCount > 0 && (
         <Text style={styles.charCount}>{charCount}</Text>
       )}
@@ -72,5 +88,13 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     fontFamily: typography.family.mono,
     letterSpacing: typography.tracking.wide,
+  },
+  interimText: {
+    color: colors.accent.primary,
+    fontSize: typography.size.md,
+    fontStyle: "italic",
+    opacity: 0.6,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xs,
   },
 });
