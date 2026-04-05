@@ -321,7 +321,8 @@ export default function CaptureScreen() {
           }
         } catch (err: any) {
           setInterimText("");
-          showFlash("error", "Couldn't transcribe — tap to retry");
+          console.error("[dictation] transcribe error:", err);
+          showFlash("error", `Couldn't transcribe: ${err.message || err}`);
         } finally {
           setTranscribing(false);
         }
