@@ -503,7 +503,7 @@ export default function CaptureScreen() {
           </Animated.View>
         )}
 
-        {/* Text input — always visible */}
+        {/* Text input + attachments share flex space */}
         <View style={styles.inputArea}>
           <CaptureInput
             value={text}
@@ -512,18 +512,16 @@ export default function CaptureScreen() {
             interimText={interimText}
             onCursorChange={(pos) => { cursorPos.current = pos; }}
           />
+          <AttachmentBar
+            attachments={attachments}
+            onRemove={handleRemoveAttachment}
+          />
         </View>
 
         {/* Lag indicator — shown when transcription results are delayed */}
         {lagging && (
           <Text style={styles.laggingText}>catching up...</Text>
         )}
-
-        {/* Attachment previews */}
-        <AttachmentBar
-          attachments={attachments}
-          onRemove={handleRemoveAttachment}
-        />
 
         {/* Transcribing indicator — pulsing mic + contextual text */}
         {saving && (
