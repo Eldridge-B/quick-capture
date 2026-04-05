@@ -294,40 +294,27 @@ export default function CaptureScreen() {
 
   const handleDictationToggle = async () => {
     if (dictating) {
-      await stopDictation();
+      // Stop recording and attach the audio for batch transcription
+      const audioUri = await stopDictation();
       setDictating(false);
       setInterimText("");
+      if (audioUri) {
+        setAttachments((prev) => [...prev, { type: "audio", uri: audioUri }]);
+      }
       return;
     }
 
     setDictating(true);
     await startDictation({
-      onInterimText: (text) => setInterimText(text),
-      onFinalText: (text) => {
-        setInterimText("");
-        setText((prev) => {
-          const { start, end } = cursorPos.current;
-          const before = prev.slice(0, start);
-          const after = prev.slice(end);
-          const needsSpace = before.length > 0 && !before.endsWith(" ") && !text.startsWith(" ");
-          const inserted = (needsSpace ? " " : "") + text;
-          const newPos = start + inserted.length;
-          cursorPos.current = { start: newPos, end: newPos };
-          return before + inserted + after;
-        });
-      },
-      onUtteranceEnd: () => {
-        // Could insert line break here in future
-      },
+      onInterimText: () => {},
+      onFinalText: () => {},
+      onUtteranceEnd: () => {},
       onError: (message) => {
         showFlash("error", message);
         setDictating(false);
-        setInterimText("");
       },
       onStateChange: (s) => setDictationState(s),
-      onFallbackAudio: (uri) => {
-        setAttachments((prev) => [...prev, { type: "audio", uri }]);
-      },
+      onFallbackAudio: () => {},
     });
   };
 

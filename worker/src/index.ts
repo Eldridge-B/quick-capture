@@ -211,6 +211,8 @@ async function transcribeAudio(
 ): Promise<string | null> {
   const audioBuffer = await audioFile.arrayBuffer();
 
+  console.log(`[transcribe] File: ${audioFile.name}, type: ${audioFile.type}, size: ${audioBuffer.byteLength} bytes`);
+
   const params = new URLSearchParams({
     model: "nova-2",
     language: "en",
@@ -220,13 +222,16 @@ async function transcribeAudio(
     filler_words: "false",
   });
 
+  // Let Deepgram auto-detect format if type is missing or generic
+  const contentType = audioFile.type || "audio/mp4";
+
   const dgRes = await fetch(
     `https://api.deepgram.com/v1/listen?${params.toString()}`,
     {
       method: "POST",
       headers: {
         Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
-        "Content-Type": audioFile.type || "audio/m4a",
+        "Content-Type": contentType,
       },
       body: audioBuffer,
     }
@@ -234,7 +239,7 @@ async function transcribeAudio(
 
   if (!dgRes.ok) {
     const errBody = await dgRes.text();
-    console.error("Deepgram error:", errBody);
+    console.error("[transcribe] Deepgram error:", errBody);
     return null;
   }
 
@@ -246,7 +251,9 @@ async function transcribeAudio(
     };
   }>();
 
-  return result.results?.channels?.[0]?.alternatives?.[0]?.transcript || null;
+  const transcript = result.results?.channels?.[0]?.alternatives?.[0]?.transcript || null;
+  console.log(`[transcribe] Result: "${transcript?.slice(0, 100) ?? "(empty)"}"`);
+  return transcript;
 }
 
 // ── WebSocket dictation proxy ──────────────────────────────
