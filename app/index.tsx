@@ -55,6 +55,7 @@ export default function CaptureScreen() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [recording, setRecording] = useState(false);
   const [dictating, setDictating] = useState(false);
+  const [lagging, setLagging] = useState(false);
   const [dictationState, setDictationState] = useState<DictationState>("idle");
   const [interimText, setInterimText] = useState("");
   const cursorPos = useRef({ start: 0, end: 0 });
@@ -174,6 +175,16 @@ export default function CaptureScreen() {
       setShowMicTooltip(false);
     }
   }, [dictating, dictationState]);
+
+
+  // ── Lag indicator — polls isLagging() every second while dictating ──
+  useEffect(() => {
+    if (\!dictating) { setLagging(false); return; }
+    const interval = setInterval(() => {
+      setLagging(isLagging());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [dictating]);
 
   // ── Share intent handling ──────────────────────────────────
   useEffect(() => {
@@ -491,6 +502,11 @@ export default function CaptureScreen() {
           />
         </View>
 
+        {/* Lag indicator — shown when transcription results are delayed */}
+        {lagging && (
+          <Text style={styles.laggingText}>catching up...</Text>
+        )}
+
         {/* Attachment previews */}
         <AttachmentBar
           attachments={attachments}
@@ -607,6 +623,13 @@ const styles = StyleSheet.create({
   inputArea: {
     flex: 1,
     marginBottom: spacing.lg,
+  },
+  laggingText: {
+    color: colors.text.muted,
+    fontSize: typography.size.xs,
+    fontStyle: "italic",
+    textAlign: "center",
+    marginBottom: spacing.sm,
   },
   processingRow: {
     flexDirection: "row",
