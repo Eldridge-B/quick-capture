@@ -16,7 +16,7 @@
  */
 
 import { File } from "expo-file-system";
-import { AudioModule, RecordingPresets, setAudioModeAsync } from "expo-audio";
+import { AudioModule, setAudioModeAsync, AudioQuality } from "expo-audio";
 import { API_BASE, CAPTURE_SECRET } from "@/services/api";
 import {
   appendChunk,
@@ -98,6 +98,33 @@ async function handleDisconnectFallback(): Promise<void> {
 }
 
 /**
+ * Recording options for 16 kHz mono PCM WAV — what Deepgram expects.
+ * NOT the HIGH_QUALITY preset (which records AAC/M4A).
+ */
+const PCM_RECORDING_OPTIONS = {
+  android: {
+    extension: ".wav" as const,
+    outputFormat: "default" as const,
+    audioEncoder: "default" as const,
+    sampleRate: 16000,
+    numberOfChannels: 1,
+    bitRate: 256000,
+  },
+  ios: {
+    extension: ".wav" as const,
+    outputFormat: "linearPCM" as const,
+    audioQuality: AudioQuality.HIGH,
+    sampleRate: 16000,
+    numberOfChannels: 1,
+    bitRate: 256000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: {},
+};
+
+/**
  * Start a fresh recorder segment (16 kHz mono PCM, WAV output).
  * Returns the recorder instance, or null on failure.
  */
@@ -105,7 +132,7 @@ async function startSegment(): Promise<InstanceType<
   typeof AudioModule.AudioRecorder
 > | null> {
   try {
-    const seg = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+    const seg = new AudioModule.AudioRecorder(PCM_RECORDING_OPTIONS);
     await seg.prepareToRecordAsync();
     seg.record();
     return seg;
