@@ -29,7 +29,7 @@ interface Env {
   IMAGE_BUCKET?: R2Bucket;
 }
 
-const CAPTURES_DATABASE_ID = "c0213ae5-93d9-4fd8-828b-3c05acf22413";
+const CAPTURES_DATABASE_ID = "7c8ea33e74c648988981053dc46b8cde";
 const NOTION_API_VERSION = "2022-06-28";
 
 const CORS_HEADERS = {
