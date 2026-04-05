@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 
 // Constants
 const MAX_DURATION_SECONDS = 60;
@@ -95,19 +95,18 @@ export async function saveBufferAsWav(): Promise<string | null> {
     offset += chunk.byteLength;
   }
 
-  // Convert to base64 and write to cache directory
-  const base64 = arrayBufferToBase64(output);
+  // Write WAV to cache directory
   const timestamp = Date.now();
-  const fileUri = `${FileSystem.cacheDirectory}audio-capture-${timestamp}.wav`;
-
-  await FileSystem.writeAsStringAsync(fileUri, base64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  const file = new File(Paths.cache, `audio-capture-${timestamp}.wav`);
+  file.create();
+  // Write raw bytes via base64 string
+  const base64 = arrayBufferToBase64(output);
+  file.write(base64, { encoding: "base64" });
 
   // Clear buffer after successful save
   clearBuffer();
 
-  return fileUri;
+  return file.uri;
 }
 
 // --- Private helpers ---

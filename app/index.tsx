@@ -179,7 +179,7 @@ export default function CaptureScreen() {
 
   // ── Lag indicator — polls isLagging() every second while dictating ──
   useEffect(() => {
-    if (\!dictating) { setLagging(false); return; }
+    if (!dictating) { setLagging(false); return; }
     const interval = setInterval(() => {
       setLagging(isLagging());
     }, 1000);
