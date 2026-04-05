@@ -72,6 +72,8 @@ export default {
           return handleMultiCapture(request, env, ctx);
         case "/ws/dictate":
           return handleDictateWebSocket(request, env, ctx);
+        case "/transcribe":
+          return handleTranscribe(request, env);
         default:
           return json({ error: "Not found" }, 404);
       }
@@ -200,6 +202,27 @@ async function handleMultiCapture(
   }
 
   return json(result);
+}
+
+// ── POST /transcribe — audio in, text out ──────────────────
+
+async function handleTranscribe(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed" }, 405);
+  }
+
+  const formData = await request.formData();
+  const audioFile = formData.get("audio") as File | null;
+
+  if (!audioFile) {
+    return json({ error: "audio file required" }, 400);
+  }
+
+  const transcript = await transcribeAudio(env, audioFile, false);
+  return json({ transcript: transcript || "" });
 }
 
 // ── Deepgram transcription ──────────────────────────────────

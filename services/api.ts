@@ -103,6 +103,36 @@ export async function submitMultiCapture(
   return res.json();
 }
 
+// ── Transcribe audio — returns text ─────────────────────────
+
+export async function transcribeAudioFile(
+  uri: string
+): Promise<string> {
+  const formData = new FormData();
+  const ext = uri.split(".").pop()?.toLowerCase() || "m4a";
+  const mimeType = ext === "wav" ? "audio/wav" : "audio/mp4";
+
+  formData.append("audio", {
+    uri,
+    type: mimeType,
+    name: `dictation.${ext}`,
+  } as any);
+
+  const res = await fetch(`${API_BASE}/transcribe`, {
+    method: "POST",
+    headers: AUTH_HEADERS,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Transcription failed (${res.status}): ${body}`);
+  }
+
+  const data = await res.json() as { transcript: string };
+  return data.transcript;
+}
+
 // ── Health check ────────────────────────────────────────────
 
 export async function healthCheck(): Promise<boolean> {

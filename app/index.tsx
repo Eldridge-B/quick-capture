@@ -29,6 +29,7 @@ import Tooltip from "@/components/Tooltip";
 import {
   submitCapture,
   submitMultiCapture,
+  transcribeAudioFile,
   CapturePayload,
 } from "@/services/api";
 import { getSharedContent, onSharedContent } from "@/services/share-receiver";
@@ -61,6 +62,7 @@ export default function CaptureScreen() {
   const cursorPos = useRef({ start: 0, end: 0 });
   const [showMicTooltip, setShowMicTooltip] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const [flash, setFlash] = useState<{
     kind: "success" | "error";
     message: string;
@@ -145,7 +147,7 @@ export default function CaptureScreen() {
 
   // ── Pulse animation (shared by recording dot + transcription mic) ──
   const pulseOpacity = useSharedValue(1);
-  const isPulsing = recording || saving || dictating;
+  const isPulsing = recording || saving || dictating || transcribing;
   useEffect(() => {
     if (isPulsing) {
       pulseOpacity.value = withRepeat(
@@ -294,12 +296,34 @@ export default function CaptureScreen() {
 
   const handleDictationToggle = async () => {
     if (dictating) {
-      // Stop recording and attach the audio for batch transcription
+      // Stop recording, transcribe, insert text at cursor
       const audioUri = await stopDictation();
       setDictating(false);
-      setInterimText("");
+
       if (audioUri) {
-        setAttachments((prev) => [...prev, { type: "audio", uri: audioUri }]);
+        setTranscribing(true);
+        setInterimText("transcribing...");
+        try {
+          const transcript = await transcribeAudioFile(audioUri);
+          setInterimText("");
+          if (transcript) {
+            setText((prev) => {
+              const { start, end } = cursorPos.current;
+              const before = prev.slice(0, start);
+              const after = prev.slice(end);
+              const needsSpace = before.length > 0 && !before.endsWith(" ") && !transcript.startsWith(" ");
+              const inserted = (needsSpace ? " " : "") + transcript;
+              const newPos = start + inserted.length;
+              cursorPos.current = { start: newPos, end: newPos };
+              return before + inserted + after;
+            });
+          }
+        } catch (err: any) {
+          setInterimText("");
+          showFlash("error", "Couldn't transcribe — tap to retry");
+        } finally {
+          setTranscribing(false);
+        }
       }
       return;
     }
@@ -445,6 +469,12 @@ export default function CaptureScreen() {
             <View style={styles.recordingBadge}>
               <Animated.View style={[styles.recordingDot, pulseStyle]} />
               <Text style={styles.recordingText}>recording</Text>
+            </View>
+          )}
+          {transcribing && (
+            <View style={styles.recordingBadge}>
+              <Animated.View style={[styles.recordingDot, { backgroundColor: colors.accent.primary }, pulseStyle]} />
+              <Text style={[styles.recordingText, { color: colors.accent.primary }]}>transcribing</Text>
             </View>
           )}
         </View>
