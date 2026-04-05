@@ -6,7 +6,7 @@
  */
 import type { Attachment } from "@/components/AttachmentBar";
 
-const API_BASE = __DEV__
+export const API_BASE = __DEV__
   ? "http://10.0.2.2:8787" // Android emulator → host machine
   : "https://quick-capture-worker.YOUR_SUBDOMAIN.workers.dev"; // ← replace after deploy
 
@@ -14,7 +14,7 @@ const API_BASE = __DEV__
  * Shared secret for authenticating with the worker.
  * Must match the CAPTURE_SECRET set on the worker via `wrangler secret put`.
  */
-const CAPTURE_SECRET = "REPLACE_WITH_YOUR_SECRET"; // ← replace before building
+export const CAPTURE_SECRET = "REPLACE_WITH_YOUR_SECRET"; // ← replace before building
 
 const AUTH_HEADERS = {
   Authorization: `Bearer ${CAPTURE_SECRET}`,
