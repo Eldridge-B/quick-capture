@@ -6,7 +6,6 @@ import AnimatedPressable from "@/components/AnimatedPressable";
 export interface Attachment {
   type: "image" | "audio";
   uri: string;
-  /** Audio duration in seconds, if applicable */
   duration?: number;
 }
 
@@ -34,9 +33,9 @@ export default function AttachmentBar({
             <Image source={{ uri: att.uri }} style={styles.thumbnail} />
           ) : (
             <View style={styles.audioPreview}>
-              <Text style={styles.audioIcon}>🎙</Text>
+              <Text style={styles.audioGlyph}>●</Text>
               <Text style={styles.audioDuration}>
-                {att.duration ? formatDuration(att.duration) : "Audio"}
+                {att.duration ? formatDuration(att.duration) : "audio"}
               </Text>
             </View>
           )}
@@ -47,7 +46,7 @@ export default function AttachmentBar({
             onPress={() => onRemove(i)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.removeBtnText}>✕</Text>
+            <Text style={styles.removeBtnText}>×</Text>
           </AnimatedPressable>
         </View>
       ))}
@@ -91,13 +90,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.xs,
   },
-  audioIcon: {
-    fontSize: typography.size.xxl,
+  audioGlyph: {
+    fontSize: 20,
+    color: colors.accent.primary,
   },
   audioDuration: {
     color: colors.text.secondary,
     fontSize: typography.size.xs,
-    fontWeight: typography.weight.medium,
+    fontFamily: typography.family.mono,
+    letterSpacing: typography.tracking.wide,
   },
   removeBtn: {
     position: "absolute",
@@ -105,14 +106,14 @@ const styles = StyleSheet.create({
     right: 4,
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radii.sm,
     backgroundColor: colors.bg.overlay,
     alignItems: "center",
     justifyContent: "center",
   },
   removeBtnText: {
-    color: colors.text.inverse,
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
+    color: colors.text.primary,
+    fontSize: 12,
+    fontWeight: typography.weight.normal,
   },
 });

@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors, spacing, commonStyles } from "@/theme";
+import { colors, spacing, radii, typography } from "@/theme";
 import AnimatedPressable from "@/components/AnimatedPressable";
 
-/**
- * These match the ⚡ Captures database "Tags" multi_select property exactly.
- */
 const CAPTURE_TAGS = [
   "Daughters",
   "School",
@@ -35,9 +32,8 @@ interface TagChipsProps {
 
 export default function TagChips({ selected, onToggle }: TagChipsProps) {
   const [expanded, setExpanded] = useState(false);
-  const [usage, setUsage] = useState<TagUsage | null>(null); // null = loading
+  const [usage, setUsage] = useState<TagUsage | null>(null);
 
-  // Load usage data on mount
   useEffect(() => {
     (async () => {
       try {
@@ -49,19 +45,16 @@ export default function TagChips({ selected, onToggle }: TagChipsProps) {
     })();
   }, []);
 
-  // While loading, show all tags to avoid flash
   if (usage === null) {
     return renderChips(CAPTURE_TAGS as unknown as CaptureTag[], selected, onToggle, null, false, () => {});
   }
 
   const hasUsageData = Object.values(usage).some((v) => v > 0);
 
-  // First-time user (no usage data) — show all, no collapse
   if (!hasUsageData) {
     return renderChips(CAPTURE_TAGS as unknown as CaptureTag[], selected, onToggle, null, false, () => {});
   }
 
-  // Sort tags by usage frequency (descending)
   const sorted = [...CAPTURE_TAGS].sort(
     (a, b) => (usage[b] ?? 0) - (usage[a] ?? 0)
   );
@@ -70,12 +63,9 @@ export default function TagChips({ selected, onToggle }: TagChipsProps) {
     return renderChips(sorted, selected, onToggle, null, false, () => {});
   }
 
-  // Collapsed: top N + any selected that aren't in top N
   const topTags = sorted.slice(0, VISIBLE_COUNT);
   const hiddenSelected = selected.filter((t) => !topTags.includes(t));
-  const visibleTags = [...topTags, ...hiddenSelected];
-  // Deduplicate (in case a selected tag is also in top N)
-  const uniqueVisible = [...new Set(visibleTags)];
+  const uniqueVisible = [...new Set([...topTags, ...hiddenSelected])];
   const hiddenCount = CAPTURE_TAGS.length - uniqueVisible.length;
 
   return renderChips(uniqueVisible, selected, onToggle, hiddenCount, true, () => setExpanded(true));
@@ -91,7 +81,7 @@ function renderChips(
 ) {
   return (
     <View style={styles.container}>
-      <Text style={commonStyles.sectionLabel}>Tags (optional)</Text>
+      <Text style={styles.sectionLabel}>tags</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.chipRow}>
           {tags.map((tag) => {
@@ -99,31 +89,18 @@ function renderChips(
             return (
               <AnimatedPressable
                 key={tag}
-                style={[
-                  commonStyles.chip,
-                  isSelected && styles.chipSelectedAlt,
-                ]}
+                style={[styles.tag, isSelected && styles.tagSelected]}
                 onPress={() => onToggle(tag)}
               >
-                <Text
-                  style={[
-                    commonStyles.chipText,
-                    isSelected && commonStyles.chipTextSelected,
-                  ]}
-                >
-                  {tag}
+                <Text style={[styles.tagText, isSelected && styles.tagTextSelected]}>
+                  {tag.toLowerCase()}
                 </Text>
               </AnimatedPressable>
             );
           })}
           {showExpander && hiddenCount !== null && hiddenCount > 0 && (
-            <AnimatedPressable
-              style={[commonStyles.chip, styles.expanderChip]}
-              onPress={onExpand}
-            >
-              <Text style={[commonStyles.chipText, styles.expanderText]}>
-                +{hiddenCount} more
-              </Text>
+            <AnimatedPressable style={[styles.tag, { borderStyle: "dashed" as any }]} onPress={onExpand}>
+              <Text style={styles.expanderText}>+{hiddenCount}</Text>
             </AnimatedPressable>
           )}
         </View>
@@ -132,7 +109,6 @@ function renderChips(
   );
 }
 
-/** Increment usage counts for the given tags. Call on successful save. */
 export async function incrementTagUsage(tags: CaptureTag[]) {
   if (tags.length === 0) return;
   try {
@@ -151,20 +127,42 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: spacing.md,
   },
+  sectionLabel: {
+    color: colors.text.muted,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.medium,
+    textTransform: "uppercase" as const,
+    letterSpacing: typography.tracking.extraWide,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
+  },
   chipRow: {
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: spacing.md,
     paddingHorizontal: 2,
-    flexWrap: "wrap",
   },
-  chipSelectedAlt: {
-    backgroundColor: colors.accent.tertiary,
-    borderColor: colors.border.selectedAlt,
+  tag: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    borderRadius: radii.sm,
   },
-  expanderChip: {
-    borderStyle: "dashed" as any,
+  tagSelected: {
+    borderColor: colors.accent.primary,
+  },
+  tagText: {
+    color: colors.text.muted,
+    fontSize: typography.size.md,
+    fontFamily: typography.family.mono,
+    letterSpacing: typography.tracking.normal,
+  },
+  tagTextSelected: {
+    color: colors.accent.primary,
   },
   expanderText: {
     color: colors.text.secondary,
+    fontSize: typography.size.md,
+    fontFamily: typography.family.mono,
   },
 });

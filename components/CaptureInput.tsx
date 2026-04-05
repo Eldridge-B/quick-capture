@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { TextInput, StyleSheet, View, Text } from "react-native";
 import { colors, spacing, radii, typography } from "@/theme";
 
@@ -15,23 +15,29 @@ export default function CaptureInput({
   placeholder,
   ref,
 }: CaptureInputProps) {
+  const [focused, setFocused] = useState(false);
   const charCount = value.length;
 
   return (
     <View style={styles.container}>
       <TextInput
         ref={ref}
-        style={styles.input}
+        style={[styles.input, focused && styles.inputFocused]}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         value={value}
         onChangeText={onChangeText}
-        placeholder={placeholder ?? "What's on your mind?"}
+        placeholder={placeholder ?? "what's on your mind..."}
         placeholderTextColor={colors.text.muted}
         multiline
         textAlignVertical="top"
         autoFocus
         selectionColor={colors.accent.primary}
+        cursorColor={colors.accent.primary}
       />
-      {charCount > 0 && <Text style={styles.charCount}>{charCount}</Text>}
+      {charCount > 0 && (
+        <Text style={styles.charCount}>{charCount}</Text>
+      )}
     </View>
   );
 }
@@ -45,20 +51,26 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text.primary,
     fontSize: typography.size.lg,
+    fontFamily: typography.family.body,
     lineHeight: typography.lineHeight.relaxed,
-    padding: spacing.lg,
+    padding: spacing.xl,
+    paddingTop: spacing.xxl,
     backgroundColor: colors.bg.raised,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border.subtle,
-    minHeight: 120,
-    maxHeight: 300,
+    minHeight: 80,
+  },
+  inputFocused: {
+    borderColor: colors.accent.primary,
   },
   charCount: {
     position: "absolute",
-    bottom: spacing.sm,
-    right: spacing.md,
+    bottom: spacing.md,
+    right: spacing.lg,
     color: colors.text.muted,
     fontSize: typography.size.xs,
+    fontFamily: typography.family.mono,
+    letterSpacing: typography.tracking.wide,
   },
 });

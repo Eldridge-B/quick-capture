@@ -4,21 +4,22 @@ import { colors, spacing, typography, commonStyles } from "@/theme";
 import AnimatedPressable from "@/components/AnimatedPressable";
 
 /**
- * These match the ⚡ Captures database "Type" select property exactly.
+ * Capture types — matched to the Notion database.
+ * No emoji. Just words.
  */
 const CAPTURE_TYPES = [
-  { label: "Idea", icon: "💡" },
-  { label: "Observation", icon: "👁" },
-  { label: "Moment", icon: "✨" },
-  { label: "Emotion", icon: "🫀" },
-  { label: "Question", icon: "❓" },
-  { label: "Overheard", icon: "👂" },
-  { label: "Image/Scene", icon: "🎨" },
-  { label: "Dream", icon: "🌙" },
-  { label: "Lookup", icon: "🔍" },
+  "Idea",
+  "Observation",
+  "Moment",
+  "Emotion",
+  "Question",
+  "Overheard",
+  "Image/Scene",
+  "Dream",
+  "Lookup",
 ] as const;
 
-export type CaptureType = (typeof CAPTURE_TYPES)[number]["label"];
+export type CaptureType = (typeof CAPTURE_TYPES)[number];
 
 interface TypeChipsProps {
   selected: CaptureType;
@@ -28,10 +29,10 @@ interface TypeChipsProps {
 export default function TypeChips({ selected, onSelect }: TypeChipsProps) {
   return (
     <View style={styles.container}>
-      <Text style={commonStyles.sectionLabel}>Type</Text>
+      <Text style={commonStyles.sectionLabel}>type</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.chipRow}>
-          {CAPTURE_TYPES.map(({ label, icon }) => (
+          {CAPTURE_TYPES.map((label) => (
             <AnimatedPressable
               key={label}
               style={[
@@ -40,7 +41,6 @@ export default function TypeChips({ selected, onSelect }: TypeChipsProps) {
               ]}
               onPress={() => onSelect(label)}
             >
-              <Text style={styles.chipIcon}>{icon}</Text>
               <Text
                 style={[
                   commonStyles.chipText,
@@ -63,10 +63,7 @@ const styles = StyleSheet.create({
   },
   chipRow: {
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: spacing.xs,
     paddingHorizontal: 2,
-  },
-  chipIcon: {
-    fontSize: typography.size.md,
   },
 });

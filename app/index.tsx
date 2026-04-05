@@ -32,7 +32,7 @@ import {
 } from "@/services/api";
 import { getSharedContent, onSharedContent } from "@/services/share-receiver";
 import { getAudioDuration } from "@/services/audio";
-import { colors, spacing, typography } from "@/theme";
+import { colors, spacing, typography, radii } from "@/theme";
 
 const QUEUE_KEY = "quick-capture-offline-queue";
 const DRAFT_KEY = "quick-capture-draft";
@@ -372,11 +372,11 @@ export default function CaptureScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>⚡ Capture</Text>
+          <Text style={styles.title}>capture</Text>
           {recording && (
             <View style={styles.recordingBadge}>
               <Animated.View style={[styles.recordingDot, pulseStyle]} />
-              <Text style={styles.recordingText}>Recording</Text>
+              <Text style={styles.recordingText}>recording</Text>
             </View>
           )}
         </View>
@@ -425,7 +425,7 @@ export default function CaptureScreen() {
         {saving && (
           <View style={styles.processingRow}>
             <Animated.Text style={[styles.processingMic, pulseStyle]}>
-              {attachments.some((a) => a.type === "audio") ? "🎙" : "⚡"}
+              {attachments.some((a) => a.type === "audio") ? "●" : "→"}
             </Animated.Text>
             <Text style={styles.processingText}>
               {attachments.some((a) => a.type === "audio")
@@ -463,59 +463,65 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: spacing.lg,
+    alignItems: "baseline",
+    marginBottom: spacing.xxl,
   },
   title: {
     color: colors.text.primary,
-    fontSize: typography.size.xxl,
-    fontWeight: typography.weight.heavy,
+    fontSize: typography.size.display,
+    fontFamily: typography.family.display,
+    fontWeight: typography.weight.normal,
+    fontStyle: "italic",
+    letterSpacing: typography.tracking.tight,
   },
   recordingBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.xs,
-    backgroundColor: colors.feedback.error,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: 12,
+    gap: spacing.sm,
   },
   recordingDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
     backgroundColor: colors.recording,
   },
   recordingText: {
-    color: colors.feedback.errorText,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
+    color: colors.recording,
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.mono,
+    letterSpacing: typography.tracking.extraWide,
+    textTransform: "uppercase",
   },
   flash: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: 8,
-    marginBottom: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radii.sm,
+    marginBottom: spacing.lg,
     alignItems: "center",
+    backgroundColor: "transparent",
+    borderWidth: 1,
   },
   flashSuccess: {
-    backgroundColor: colors.feedback.success,
+    borderColor: colors.feedback.successText,
   },
   flashError: {
-    backgroundColor: colors.feedback.error,
+    borderColor: colors.feedback.errorText,
   },
   flashText: {
-    fontSize: typography.size.base,
-    fontWeight: typography.weight.semibold,
+    fontSize: typography.size.md,
+    fontFamily: typography.family.mono,
+    letterSpacing: typography.tracking.wide,
   },
   inputArea: {
     flex: 1,
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
   processingRow: {
     flexDirection: "row",
@@ -525,11 +531,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   processingMic: {
-    fontSize: typography.size.xl,
+    fontSize: typography.size.base,
+    color: colors.accent.primary,
   },
   processingText: {
     color: colors.text.secondary,
     fontSize: typography.size.md,
+    fontStyle: "italic",
   },
   metadata: {
     marginBottom: spacing.sm,

@@ -5,6 +5,7 @@ import {
   AudioModule,
   RecordingPresets,
   setAudioModeAsync,
+  createAudioPlayer,
 } from "expo-audio";
 
 let recorder: InstanceType<typeof AudioModule.AudioRecorder> | null = null;
@@ -82,9 +83,9 @@ export function isRecording(): boolean {
  */
 export async function getAudioDuration(uri: string): Promise<number> {
   try {
-    const player = new AudioModule.AudioPlayer(uri);
-    // Wait briefly for the player to load
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    const player = createAudioPlayer(uri);
+    // Wait briefly for the player to load metadata
+    await new Promise((resolve) => setTimeout(resolve, 300));
     const duration = player.duration ?? 0;
     player.release();
     return Math.round(duration);
