@@ -28,9 +28,10 @@ interface TagUsage {
 interface TagChipsProps {
   selected: CaptureTag[];
   onToggle: (tag: CaptureTag) => void;
+  disabled?: boolean;
 }
 
-export default function TagChips({ selected, onToggle }: TagChipsProps) {
+export default function TagChips({ selected, onToggle, disabled }: TagChipsProps) {
   const [expanded, setExpanded] = useState(false);
   const [usage, setUsage] = useState<TagUsage | null>(null);
 
@@ -46,13 +47,13 @@ export default function TagChips({ selected, onToggle }: TagChipsProps) {
   }, []);
 
   if (usage === null) {
-    return renderChips(CAPTURE_TAGS as unknown as CaptureTag[], selected, onToggle, null, false, () => {});
+    return renderChips(CAPTURE_TAGS as unknown as CaptureTag[], selected, onToggle, null, false, () => {}, disabled);
   }
 
   const hasUsageData = Object.values(usage).some((v) => v > 0);
 
   if (!hasUsageData) {
-    return renderChips(CAPTURE_TAGS as unknown as CaptureTag[], selected, onToggle, null, false, () => {});
+    return renderChips(CAPTURE_TAGS as unknown as CaptureTag[], selected, onToggle, null, false, () => {}, disabled);
   }
 
   const sorted = [...CAPTURE_TAGS].sort(
@@ -60,7 +61,7 @@ export default function TagChips({ selected, onToggle }: TagChipsProps) {
   );
 
   if (expanded) {
-    return renderChips(sorted, selected, onToggle, null, false, () => {});
+    return renderChips(sorted, selected, onToggle, null, false, () => {}, disabled);
   }
 
   const topTags = sorted.slice(0, VISIBLE_COUNT);
@@ -68,7 +69,7 @@ export default function TagChips({ selected, onToggle }: TagChipsProps) {
   const uniqueVisible = [...new Set([...topTags, ...hiddenSelected])];
   const hiddenCount = CAPTURE_TAGS.length - uniqueVisible.length;
 
-  return renderChips(uniqueVisible, selected, onToggle, hiddenCount, true, () => setExpanded(true));
+  return renderChips(uniqueVisible, selected, onToggle, hiddenCount, true, () => setExpanded(true), disabled);
 }
 
 function renderChips(
@@ -78,9 +79,10 @@ function renderChips(
   hiddenCount: number | null,
   showExpander: boolean,
   onExpand: () => void,
+  disabled?: boolean,
 ) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, disabled && styles.disabled]}>
       <Text style={styles.sectionLabel}>tags</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.chipRow}>
@@ -164,5 +166,9 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     fontSize: typography.size.md,
     fontFamily: typography.family.mono,
+  },
+  disabled: {
+    opacity: 0.4,
+    pointerEvents: "none" as const,
   },
 });

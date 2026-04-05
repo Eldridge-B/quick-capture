@@ -32,6 +32,7 @@ import {
 } from "@/services/api";
 import { getSharedContent, onSharedContent } from "@/services/share-receiver";
 import { getAudioDuration } from "@/services/audio";
+import { startDictation, stopDictation, DictationState, isLagging } from "@/services/dictation";
 import { colors, spacing, typography, radii } from "@/theme";
 
 const QUEUE_KEY = "quick-capture-offline-queue";
@@ -51,6 +52,10 @@ export default function CaptureScreen() {
   const [tags, setTags] = useState<CaptureTag[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [recording, setRecording] = useState(false);
+  const [dictating, setDictating] = useState(false);
+  const [dictationState, setDictationState] = useState<DictationState>("idle");
+  const [interimText, setInterimText] = useState("");
+  const cursorPos = useRef({ start: 0, end: 0 });
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState<{
     kind: "success" | "error";
@@ -136,7 +141,7 @@ export default function CaptureScreen() {
 
   // ── Pulse animation (shared by recording dot + transcription mic) ──
   const pulseOpacity = useSharedValue(1);
-  const isPulsing = recording || saving;
+  const isPulsing = recording || saving || dictating;
   useEffect(() => {
     if (isPulsing) {
       pulseOpacity.value = withRepeat(
@@ -259,6 +264,45 @@ export default function CaptureScreen() {
     });
   };
 
+  const handleDictationToggle = async () => {
+    if (dictating) {
+      await stopDictation();
+      setDictating(false);
+      setInterimText("");
+      return;
+    }
+
+    setDictating(true);
+    await startDictation({
+      onInterimText: (text) => setInterimText(text),
+      onFinalText: (text) => {
+        setInterimText("");
+        setText((prev) => {
+          const { start, end } = cursorPos.current;
+          const before = prev.slice(0, start);
+          const after = prev.slice(end);
+          const needsSpace = before.length > 0 && !before.endsWith(" ") && !text.startsWith(" ");
+          const inserted = (needsSpace ? " " : "") + text;
+          const newPos = start + inserted.length;
+          cursorPos.current = { start: newPos, end: newPos };
+          return before + inserted + after;
+        });
+      },
+      onUtteranceEnd: () => {
+        // Could insert line break here in future
+      },
+      onError: (message) => {
+        showFlash("error", message);
+        setDictating(false);
+        setInterimText("");
+      },
+      onStateChange: (s) => setDictationState(s),
+      onFallbackAudio: (uri) => {
+        setAttachments((prev) => [...prev, { type: "audio", uri }]);
+      },
+    });
+  };
+
   const handleRecordingStart = () => {
     setRecording(true);
     autoSelectType("Overheard");
@@ -373,7 +417,16 @@ export default function CaptureScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>capture</Text>
-          {recording && (
+          {/* Status badges */}
+          {dictating && (
+            <View style={styles.recordingBadge}>
+              <Animated.View style={[styles.recordingDot, { backgroundColor: colors.accent.primary }, pulseStyle]} />
+              <Text style={[styles.recordingText, { color: colors.accent.primary }]}>
+                {dictationState === "connecting" ? "connecting..." : "listening"}
+              </Text>
+            </View>
+          )}
+          {recording && !dictating && (
             <View style={styles.recordingBadge}>
               <Animated.View style={[styles.recordingDot, pulseStyle]} />
               <Text style={styles.recordingText}>recording</Text>
@@ -412,7 +465,13 @@ export default function CaptureScreen() {
 
         {/* Text input — always visible */}
         <View style={styles.inputArea}>
-          <CaptureInput value={text} onChangeText={setText} />
+          <CaptureInput
+            value={text}
+            onChangeText={setText}
+            editable={!saving}
+            interimText={interimText}
+            onCursorChange={(pos) => { cursorPos.current = pos; }}
+          />
         </View>
 
         {/* Attachment previews */}
@@ -437,18 +496,20 @@ export default function CaptureScreen() {
 
         {/* Metadata chips */}
         <View style={styles.metadata}>
-          <TypeChips selected={type} onSelect={handleTypeSelect} />
-          <TagChips selected={tags} onToggle={toggleTag} />
+          <TypeChips selected={type} onSelect={handleTypeSelect} disabled={saving} />
+          <TagChips selected={tags} onToggle={toggleTag} disabled={saving} />
         </View>
 
         {/* Action bar: camera, gallery, mic, save */}
         <ActionBar
           recording={recording}
+          dictating={dictating}
           busy={saving}
           canSave={canSave}
           onImagePicked={handleImagePicked}
           onRecordingStart={handleRecordingStart}
           onRecordingComplete={handleRecordingComplete}
+          onDictationToggle={handleDictationToggle}
           onSave={handleSave}
         />
       </KeyboardAvoidingView>

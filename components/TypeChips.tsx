@@ -24,11 +24,12 @@ export type CaptureType = (typeof CAPTURE_TYPES)[number];
 interface TypeChipsProps {
   selected: CaptureType;
   onSelect: (type: CaptureType) => void;
+  disabled?: boolean;
 }
 
-export default function TypeChips({ selected, onSelect }: TypeChipsProps) {
+export default function TypeChips({ selected, onSelect, disabled }: TypeChipsProps) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, disabled && styles.disabled]}>
       <Text style={commonStyles.sectionLabel}>type</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.chipRow}>
@@ -65,5 +66,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing.xs,
     paddingHorizontal: 2,
+  },
+  disabled: {
+    opacity: 0.4,
+    pointerEvents: "none" as const,
   },
 });
