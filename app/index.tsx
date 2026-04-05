@@ -571,6 +571,8 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.bg.base,
+    borderWidth: 1,
+    borderColor: colors.accent.primary,
   },
   container: {
     flex: 1,
