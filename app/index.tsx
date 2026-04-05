@@ -25,6 +25,7 @@ import TypeChips, { CaptureType } from "@/components/TypeChips";
 import TagChips, { CaptureTag, incrementTagUsage } from "@/components/TagChips";
 import AttachmentBar, { Attachment } from "@/components/AttachmentBar";
 import ActionBar from "@/components/ActionBar";
+import Tooltip from "@/components/Tooltip";
 import {
   submitCapture,
   submitMultiCapture,
@@ -37,6 +38,7 @@ import { colors, spacing, typography, radii } from "@/theme";
 
 const QUEUE_KEY = "quick-capture-offline-queue";
 const DRAFT_KEY = "quick-capture-draft";
+const TOOLTIP_KEY = "quick-capture-mic-tooltip-shown";
 
 interface Draft {
   text: string;
@@ -56,6 +58,7 @@ export default function CaptureScreen() {
   const [dictationState, setDictationState] = useState<DictationState>("idle");
   const [interimText, setInterimText] = useState("");
   const cursorPos = useRef({ start: 0, end: 0 });
+  const [showMicTooltip, setShowMicTooltip] = useState(false);
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState<{
     kind: "success" | "error";
@@ -157,6 +160,20 @@ export default function CaptureScreen() {
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: pulseOpacity.value,
   }));
+
+  // ── First-use mic tooltip ─────────────────────────────────
+  useEffect(() => {
+    if (dictating && dictationState === "listening") {
+      AsyncStorage.getItem(TOOLTIP_KEY).then((shown) => {
+        if (!shown) {
+          setShowMicTooltip(true);
+          AsyncStorage.setItem(TOOLTIP_KEY, "true").catch(() => {});
+        }
+      });
+    } else {
+      setShowMicTooltip(false);
+    }
+  }, [dictating, dictationState]);
 
   // ── Share intent handling ──────────────────────────────────
   useEffect(() => {
@@ -501,17 +518,24 @@ export default function CaptureScreen() {
         </View>
 
         {/* Action bar: camera, gallery, mic, save */}
-        <ActionBar
-          recording={recording}
-          dictating={dictating}
-          busy={saving}
-          canSave={canSave}
-          onImagePicked={handleImagePicked}
-          onRecordingStart={handleRecordingStart}
-          onRecordingComplete={handleRecordingComplete}
-          onDictationToggle={handleDictationToggle}
-          onSave={handleSave}
-        />
+        <View style={{ position: "relative" }}>
+          <ActionBar
+            recording={recording}
+            dictating={dictating}
+            busy={saving}
+            canSave={canSave}
+            onImagePicked={handleImagePicked}
+            onRecordingStart={handleRecordingStart}
+            onRecordingComplete={handleRecordingComplete}
+            onDictationToggle={handleDictationToggle}
+            onSave={handleSave}
+          />
+          <Tooltip
+            text="hold for audio"
+            visible={showMicTooltip}
+            onDismiss={() => setShowMicTooltip(false)}
+          />
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
