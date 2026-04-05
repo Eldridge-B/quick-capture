@@ -6,9 +6,7 @@
  */
 import type { Attachment } from "@/components/AttachmentBar";
 
-export const API_BASE = __DEV__
-  ? "http://10.0.2.2:8787" // Android emulator → host machine
-  : "https://quick-capture-worker.quick-capture-worker.workers.dev";
+export const API_BASE = "https://quick-capture-worker.quick-capture-worker.workers.dev";
 
 /**
  * Shared secret for authenticating with the worker.
