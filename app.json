@@ -22,17 +22,27 @@
       "intentFilters": [
         {
           "action": "SEND",
-          "category": ["DEFAULT"],
+          "category": [
+            "DEFAULT"
+          ],
           "data": [
-            { "mimeType": "text/plain" },
-            { "mimeType": "text/*" }
+            {
+              "mimeType": "text/plain"
+            },
+            {
+              "mimeType": "text/*"
+            }
           ]
         },
         {
           "action": "SEND",
-          "category": ["DEFAULT"],
+          "category": [
+            "DEFAULT"
+          ],
           "data": [
-            { "mimeType": "image/*" }
+            {
+              "mimeType": "image/*"
+            }
           ]
         }
       ]
@@ -40,7 +50,7 @@
     "plugins": [
       "expo-router",
       [
-        "expo-av",
+        "expo-audio",
         {
           "microphonePermission": "Quick Capture needs microphone access for voice notes."
         }
@@ -51,7 +61,8 @@
           "photosPermission": "Quick Capture needs photo access to attach images.",
           "cameraPermission": "Quick Capture needs camera access to take photos."
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

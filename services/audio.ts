@@ -1,21 +1,24 @@
 /**
- * Audio recording utilities using expo-av.
+ * Audio recording utilities using expo-audio (SDK 55+).
  */
-import { Audio } from "expo-av";
-import * as FileSystem from "expo-file-system";
+import {
+  AudioModule,
+  RecordingPresets,
+  setAudioModeAsync,
+} from "expo-audio";
 
-let recording: Audio.Recording | null = null;
+let recorder: InstanceType<typeof AudioModule.AudioRecorder> | null = null;
 
 /**
  * Request microphone permission and prepare audio mode.
  */
 export async function ensurePermissions(): Promise<boolean> {
-  const { status } = await Audio.requestPermissionsAsync();
-  if (status !== "granted") return false;
+  const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+  if (!granted) return false;
 
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: true,
-    playsInSilentModeIOS: true,
+  await setAudioModeAsync({
+    allowsRecording: true,
+    playsInSilentMode: true,
   });
 
   return true;
@@ -26,19 +29,17 @@ export async function ensurePermissions(): Promise<boolean> {
  */
 export async function startRecording(): Promise<boolean> {
   try {
-    if (recording) {
-      await recording.stopAndUnloadAsync();
-      recording = null;
+    if (recorder) {
+      recorder.release();
+      recorder = null;
     }
 
     const hasPermission = await ensurePermissions();
     if (!hasPermission) return false;
 
-    const { recording: newRecording } = await Audio.Recording.createAsync(
-      Audio.RecordingOptionsPresets.HIGH_QUALITY
-    );
-
-    recording = newRecording;
+    recorder = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+    await recorder.prepareToRecordAsync();
+    recorder.record();
     return true;
   } catch (err) {
     console.error("Failed to start recording:", err);
@@ -51,16 +52,20 @@ export async function startRecording(): Promise<boolean> {
  */
 export async function stopRecording(): Promise<string | null> {
   try {
-    if (!recording) return null;
+    if (!recorder) return null;
 
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-    recording = null;
+    await recorder.stop();
+    const uri = recorder.uri;
+    recorder.release();
+    recorder = null;
 
-    return uri;
+    return uri ?? null;
   } catch (err) {
     console.error("Failed to stop recording:", err);
-    recording = null;
+    if (recorder) {
+      recorder.release();
+      recorder = null;
+    }
     return null;
   }
 }
@@ -69,7 +74,7 @@ export async function stopRecording(): Promise<string | null> {
  * Check if currently recording.
  */
 export function isRecording(): boolean {
-  return recording !== null;
+  return recorder !== null;
 }
 
 /**
@@ -77,14 +82,12 @@ export function isRecording(): boolean {
  */
 export async function getAudioDuration(uri: string): Promise<number> {
   try {
-    const { sound } = await Audio.Sound.createAsync({ uri });
-    const status = await sound.getStatusAsync();
-    await sound.unloadAsync();
-
-    if (status.isLoaded && status.durationMillis) {
-      return Math.round(status.durationMillis / 1000);
-    }
-    return 0;
+    const player = new AudioModule.AudioPlayer(uri);
+    // Wait briefly for the player to load
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const duration = player.duration ?? 0;
+    player.release();
+    return Math.round(duration);
   } catch {
     return 0;
   }

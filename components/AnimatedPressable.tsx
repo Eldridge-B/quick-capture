@@ -22,8 +22,6 @@ const SPRING_CONFIG = {
   stiffness: 300,
   mass: 0.8,
   overshootClamping: false,
-  restDisplacementThreshold: 0.01,
-  restSpeedThreshold: 0.01,
 };
 
 export default function AnimatedPressable({
