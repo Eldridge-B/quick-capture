@@ -98,41 +98,38 @@ async function handleDisconnectFallback(): Promise<void> {
 }
 
 /**
- * Recording options for 16 kHz mono PCM WAV — what Deepgram expects.
- * NOT the HIGH_QUALITY preset (which records AAC/M4A).
+ * Recording options for short segments — uses platform defaults (AAC on Android,
+ * AAC on iOS). Deepgram auto-detects the format when no encoding is specified.
  */
-const PCM_RECORDING_OPTIONS = {
+const SEGMENT_RECORDING_OPTIONS = {
   android: {
-    extension: ".wav" as const,
-    outputFormat: "default" as const,
-    audioEncoder: "default" as const,
+    extension: ".m4a" as const,
+    outputFormat: "mpeg4" as const,
+    audioEncoder: "aac" as const,
     sampleRate: 16000,
     numberOfChannels: 1,
-    bitRate: 256000,
+    bitRate: 64000,
   },
   ios: {
-    extension: ".wav" as const,
-    outputFormat: "linearPCM" as const,
-    audioQuality: AudioQuality.HIGH,
+    extension: ".m4a" as const,
+    outputFormat: "mpeg4" as const,
+    audioQuality: AudioQuality.MEDIUM,
     sampleRate: 16000,
     numberOfChannels: 1,
-    bitRate: 256000,
-    linearPCMBitDepth: 16,
-    linearPCMIsBigEndian: false,
-    linearPCMIsFloat: false,
+    bitRate: 64000,
   },
   web: {},
 };
 
 /**
- * Start a fresh recorder segment (16 kHz mono PCM, WAV output).
+ * Start a fresh recorder segment.
  * Returns the recorder instance, or null on failure.
  */
 async function startSegment(): Promise<InstanceType<
   typeof AudioModule.AudioRecorder
 > | null> {
   try {
-    const seg = new AudioModule.AudioRecorder(PCM_RECORDING_OPTIONS);
+    const seg = new AudioModule.AudioRecorder(SEGMENT_RECORDING_OPTIONS);
     await seg.prepareToRecordAsync();
     seg.record();
     return seg;
@@ -143,28 +140,23 @@ async function startSegment(): Promise<InstanceType<
 }
 
 /**
- * Read the WAV file at `uri`, strip the 44-byte WAV header, and return the
- * raw PCM bytes as an ArrayBuffer. Returns null if the file cannot be read or
- * is too short to contain a valid header.
+ * Read an audio file and return its raw bytes as an ArrayBuffer.
  */
-async function readPcmFromWav(uri: string): Promise<ArrayBuffer | null> {
+async function readAudioFile(uri: string): Promise<ArrayBuffer | null> {
   try {
     const file = new File(uri);
     const base64 = await file.base64();
 
-    // Decode base64 → binary string → Uint8Array
     const binaryStr = atob(base64);
     const bytes = new Uint8Array(binaryStr.length);
     for (let i = 0; i < binaryStr.length; i++) {
       bytes[i] = binaryStr.charCodeAt(i);
     }
 
-    // WAV header is exactly 44 bytes; anything shorter has no PCM data.
-    if (bytes.byteLength <= 44) return null;
-
-    return bytes.buffer.slice(44);
+    if (bytes.byteLength === 0) return null;
+    return bytes.buffer;
   } catch (err) {
-    console.warn("[dictation] readPcmFromWav failed:", err);
+    console.warn("[dictation] readAudioFile failed:", err);
     return null;
   }
 }
@@ -196,14 +188,14 @@ async function streamTick(): Promise<void> {
 
   // Read and send the PCM from the segment we just stopped.
   if (uri) {
-    const pcm = await readPcmFromWav(uri);
-    if (pcm && pcm.byteLength > 0) {
+    const audioData = await readAudioFile(uri);
+    if (audioData && audioData.byteLength > 0) {
       try {
-        ws.send(pcm);
+        ws.send(audioData);
       } catch (err) {
         console.warn("[dictation] ws.send failed:", err);
       }
-      appendChunk(pcm);
+      appendChunk(audioData);
     }
     // Delete the temp segment file to avoid filling storage.
     try {

@@ -266,6 +266,8 @@ async function handleDictateWebSocket(
   server.accept();
 
   // Build Deepgram streaming URL
+  // Don't specify encoding/sample_rate — Deepgram auto-detects the format.
+  // The app sends short M4A (AAC) segments on Android, WAV on iOS.
   const dgParams = new URLSearchParams({
     model: "nova-2",
     language: "en",
@@ -274,9 +276,6 @@ async function handleDictateWebSocket(
     interim_results: "true",
     endpointing: "300",
     utterance_end_ms: "1000",
-    encoding: "linear16",
-    sample_rate: "16000",
-    channels: "1",
   });
 
   const dgUrl = `wss://api.deepgram.com/v1/listen?${dgParams.toString()}`;
