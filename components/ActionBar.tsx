@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { View, Text, StyleSheet, Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
@@ -39,23 +39,30 @@ function MicIcon({ color, size = 18 }: { color: string; size?: number }) {
 
 interface ActionBarProps {
   recording: boolean;
+  dictating: boolean;
   busy: boolean;
   canSave: boolean;
   onImagePicked: (uri: string) => void;
   onRecordingStart: () => void;
   onRecordingComplete: (uri: string) => void;
+  onDictationToggle: () => void;
   onSave: () => void;
 }
 
 export default function ActionBar({
   recording,
+  dictating,
   busy,
   canSave,
   onImagePicked,
   onRecordingStart,
   onRecordingComplete,
+  onDictationToggle,
   onSave,
 }: ActionBarProps) {
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLongPress = useRef(false);
+
   const handlePickImage = async () => {
     if (recording || busy) return;
 
@@ -97,17 +104,44 @@ export default function ActionBar({
     }
   };
 
-  const handleMicPress = async () => {
+  const handleMicPressIn = () => {
     if (busy) return;
+    if (dictating || recording) return;
 
-    if (!recording) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    didLongPress.current = false;
+    longPressTimer.current = setTimeout(async () => {
+      didLongPress.current = true;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       const started = await startRecording();
       if (started) onRecordingStart();
-    } else {
+    }, 500);
+  };
+
+  const handleMicPressOut = () => {
+    if (busy) return;
+
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+
+    if (recording) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const uri = await stopRecording();
-      if (uri) onRecordingComplete(uri);
+      stopRecording().then((uri) => {
+        if (uri) onRecordingComplete(uri);
+      });
+      return;
+    }
+
+    if (dictating) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onDictationToggle();
+      return;
+    }
+
+    if (!didLongPress.current) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      onDictationToggle();
     }
   };
 
@@ -134,16 +168,18 @@ export default function ActionBar({
         <AnimatedPressable
           style={[
             styles.actionBtn,
+            dictating && styles.micDictating,
             recording && styles.micRecording,
-            busy && !recording && styles.actionBtnDisabled,
+            busy && !recording && !dictating && styles.actionBtnDisabled,
           ]}
-          onPress={handleMicPress}
-          disabled={busy && !recording}
+          onPressIn={handleMicPressIn}
+          onPressOut={handleMicPressOut}
+          disabled={busy && !recording && !dictating}
         >
           {recording ? (
             <Text style={[styles.actionGlyph, styles.micGlyphRecording]}>◼</Text>
           ) : (
-            <MicIcon color={colors.text.secondary} size={20} />
+            <MicIcon color={dictating ? colors.accent.primary : colors.text.secondary} size={20} />
           )}
         </AnimatedPressable>
       </View>
@@ -191,6 +227,9 @@ const styles = StyleSheet.create({
   },
   actionBtnDisabled: {
     opacity: 0.25,
+  },
+  micDictating: {
+    borderColor: colors.accent.primary,
   },
   micRecording: {
     backgroundColor: "transparent",
