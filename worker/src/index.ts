@@ -71,7 +71,7 @@ export default {
         case "/capture-multi":
           return handleMultiCapture(request, env, ctx);
         case "/ws/dictate":
-          return handleDictateWebSocket(request, env);
+          return handleDictateWebSocket(request, env, ctx);
         default:
           return json({ error: "Not found" }, 404);
       }
@@ -253,80 +253,27 @@ async function transcribeAudio(
 
 async function handleDictateWebSocket(
   request: Request,
-  env: Env
+  env: Env,
+  ctx: ExecutionContext
 ): Promise<Response> {
-  // Validate WebSocket upgrade
   const upgradeHeader = request.headers.get("Upgrade");
   if (!upgradeHeader || upgradeHeader.toLowerCase() !== "websocket") {
     return json({ error: "Expected WebSocket upgrade" }, 426);
   }
 
-  // Create client ↔ worker WebSocket pair
   const [client, server] = Object.values(new WebSocketPair());
   server.accept();
 
-  // Build Deepgram streaming URL
-  // Don't specify encoding/sample_rate — Deepgram auto-detects the format.
-  // The app sends short M4A (AAC) segments on Android, WAV on iOS.
-  const dgParams = new URLSearchParams({
-    model: "nova-2",
-    language: "en",
-    smart_format: "true",
-    punctuate: "true",
-    interim_results: "true",
-    endpointing: "300",
-    utterance_end_ms: "1000",
-  });
-
-  const dgUrl = `wss://api.deepgram.com/v1/listen?${dgParams.toString()}`;
-
+  // Queue messages from client until Deepgram is ready
+  const pendingMessages: (string | ArrayBuffer)[] = [];
   let deepgram: WebSocket | null = null;
   let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+  let dgReady = false;
 
-  // In Cloudflare Workers, outbound WebSocket connections use fetch() with Upgrade header
-  try {
-    const dgRes = await fetch(dgUrl.replace("wss://", "https://"), {
-      headers: {
-        Upgrade: "websocket",
-        Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
-      },
-    });
-
-    deepgram = (dgRes as any).webSocket as WebSocket;
-    if (!deepgram) {
-      throw new Error("Deepgram did not return a WebSocket");
-    }
-    deepgram.accept();
-
-    // Send KeepAlive every 8 seconds
-    keepAliveInterval = setInterval(() => {
-      try {
-        deepgram?.send(JSON.stringify({ type: "KeepAlive" }));
-      } catch { /* ignore */ }
-    }, 8000);
-
-    // Deepgram → client: forward transcription results
-    deepgram.addEventListener("message", (event) => {
-      try {
-        server.send(typeof event.data === "string" ? event.data : event.data);
-      } catch { /* client may have disconnected */ }
-    });
-
-    deepgram.addEventListener("error", () => {
-      try {
-        server.send(JSON.stringify({ type: "error", message: "Deepgram connection error" }));
-      } catch { /* ignore */ }
-      cleanup();
-    });
-
-    deepgram.addEventListener("close", () => cleanup());
-
-    // Client → Deepgram: forward audio and control messages
-    server.addEventListener("message", (event) => {
-      if (!deepgram) return;
-
+  // Buffer client messages until Deepgram connects
+  server.addEventListener("message", (event) => {
+    if (dgReady && deepgram) {
       const data = event.data;
-
       if (typeof data === "string") {
         try {
           const msg = JSON.parse(data);
@@ -336,25 +283,14 @@ async function handleDictateWebSocket(
           }
         } catch { /* not JSON */ }
       }
-
       deepgram.send(data);
-    });
+    } else {
+      pendingMessages.push(event.data);
+    }
+  });
 
-    server.addEventListener("close", () => {
-      try {
-        deepgram?.send(JSON.stringify({ type: "CloseStream" }));
-      } catch { /* ignore */ }
-      cleanup();
-    });
-
-    server.addEventListener("error", () => cleanup());
-  } catch (err: any) {
-    console.error("Failed to connect to Deepgram:", err);
-    try {
-      server.send(JSON.stringify({ type: "error", message: `Deepgram unavailable: ${err.message}` }));
-      server.close(1011, "Deepgram connection failed");
-    } catch { /* ignore */ }
-  }
+  server.addEventListener("close", () => cleanup());
+  server.addEventListener("error", () => cleanup());
 
   function cleanup() {
     if (keepAliveInterval) {
@@ -366,6 +302,72 @@ async function handleDictateWebSocket(
     try { server.close(); } catch { /* ignore */ }
   }
 
+  // Connect to Deepgram in the background (after returning the Response)
+  ctx.waitUntil((async () => {
+    try {
+      const dgParams = new URLSearchParams({
+        model: "nova-2",
+        language: "en",
+        smart_format: "true",
+        punctuate: "true",
+        interim_results: "true",
+        endpointing: "300",
+        utterance_end_ms: "1000",
+      });
+
+      const dgUrl = `https://api.deepgram.com/v1/listen?${dgParams.toString()}`;
+
+      console.log("[dictate] Connecting to Deepgram...");
+      const dgRes = await fetch(dgUrl, {
+        headers: {
+          Upgrade: "websocket",
+          Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
+        },
+      });
+
+      deepgram = (dgRes as any).webSocket as WebSocket;
+      if (!deepgram) {
+        throw new Error("Deepgram did not return a WebSocket");
+      }
+      deepgram.accept();
+      console.log("[dictate] Deepgram connected");
+
+      // Flush any messages that arrived while connecting
+      dgReady = true;
+      for (const msg of pendingMessages) {
+        deepgram.send(msg);
+      }
+      pendingMessages.length = 0;
+
+      // KeepAlive every 8 seconds
+      keepAliveInterval = setInterval(() => {
+        try { deepgram?.send(JSON.stringify({ type: "KeepAlive" })); } catch { /* ignore */ }
+      }, 8000);
+
+      // Deepgram → client
+      deepgram.addEventListener("message", (event) => {
+        try { server.send(typeof event.data === "string" ? event.data : event.data); }
+        catch { /* client disconnected */ }
+      });
+
+      deepgram.addEventListener("error", () => {
+        try { server.send(JSON.stringify({ type: "error", message: "Deepgram error" })); }
+        catch { /* ignore */ }
+        cleanup();
+      });
+
+      deepgram.addEventListener("close", () => cleanup());
+
+    } catch (err: any) {
+      console.error("[dictate] Deepgram connection failed:", err);
+      try {
+        server.send(JSON.stringify({ type: "error", message: `Deepgram unavailable: ${err.message}` }));
+        server.close(1011, "Deepgram connection failed");
+      } catch { /* ignore */ }
+    }
+  })());
+
+  // Return immediately — client WebSocket is live, Deepgram connects in background
   return new Response(null, { status: 101, webSocket: client });
 }
 
