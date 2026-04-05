@@ -5,6 +5,7 @@
  *   POST /capture       — Text-only capture → Notion
  *   POST /capture-multi — Multipart capture (text + images + audio) → Notion
  *   GET  /health        — Health check
+ *   WS   /ws/dictate    — WebSocket proxy to Deepgram streaming transcription
  *
  * Features:
  *   - Images stored in R2, embedded in Notion page body
@@ -49,13 +50,17 @@ export default {
       return new Response(null, { headers: CORS_HEADERS });
     }
 
-    // Auth
+    // Auth — support both Authorization header and ?token= query param (for WebSocket upgrades)
     const authHeader = request.headers.get("Authorization");
-    if (authHeader !== `Bearer ${env.CAPTURE_SECRET}`) {
+    const url = new URL(request.url);
+    const authParam = url.searchParams.get("token");
+    const token = authHeader?.replace("Bearer ", "") || authParam;
+
+    if (token !== env.CAPTURE_SECRET) {
       return json({ error: "Unauthorized" }, 401);
     }
 
-    const path = new URL(request.url).pathname;
+    const path = url.pathname;
 
     try {
       switch (path) {
@@ -65,6 +70,8 @@ export default {
           return handleCapture(request, env, ctx);
         case "/capture-multi":
           return handleMultiCapture(request, env, ctx);
+        case "/ws/dictate":
+          return handleDictateWebSocket(request, env);
         default:
           return json({ error: "Not found" }, 404);
       }
@@ -240,6 +247,164 @@ async function transcribeAudio(
   }>();
 
   return result.results?.channels?.[0]?.alternatives?.[0]?.transcript || null;
+}
+
+// ── WebSocket dictation proxy ──────────────────────────────
+
+async function handleDictateWebSocket(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  // Validate WebSocket upgrade
+  const upgradeHeader = request.headers.get("Upgrade");
+  if (!upgradeHeader || upgradeHeader.toLowerCase() !== "websocket") {
+    return json({ error: "Expected WebSocket upgrade" }, 426);
+  }
+
+  // Create client ↔ worker WebSocket pair
+  const [client, server] = Object.values(new WebSocketPair());
+  server.accept();
+
+  // Build Deepgram streaming URL
+  const dgParams = new URLSearchParams({
+    model: "nova-2",
+    language: "en",
+    smart_format: "true",
+    punctuate: "true",
+    interim_results: "true",
+    endpointing: "300",
+    utterance_end_ms: "1000",
+    encoding: "linear16",
+    sample_rate: "16000",
+    channels: "1",
+  });
+
+  const dgUrl = `wss://api.deepgram.com/v1/listen?${dgParams.toString()}`;
+
+  let deepgram: WebSocket | null = null;
+  let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+
+  try {
+    // Connect to Deepgram using subprotocol auth
+    deepgram = new WebSocket(dgUrl, ["token", env.DEEPGRAM_API_KEY]);
+
+    // Wait for Deepgram connection to open
+    deepgram.addEventListener("open", () => {
+      // Send KeepAlive every 8 seconds
+      keepAliveInterval = setInterval(() => {
+        if (deepgram && deepgram.readyState === WebSocket.READY_STATE_OPEN) {
+          deepgram.send(JSON.stringify({ type: "KeepAlive" }));
+        }
+      }, 8000);
+    });
+
+    // Deepgram → client: forward transcription results
+    deepgram.addEventListener("message", (event) => {
+      try {
+        server.send(typeof event.data === "string" ? event.data : event.data);
+      } catch {
+        // Client may have disconnected
+      }
+    });
+
+    // Deepgram connection error
+    deepgram.addEventListener("error", (event) => {
+      console.error("Deepgram WebSocket error:", event);
+      try {
+        server.send(JSON.stringify({ type: "error", message: "Deepgram connection error" }));
+      } catch {
+        // Client may have disconnected
+      }
+      cleanup();
+    });
+
+    // Deepgram closed
+    deepgram.addEventListener("close", () => {
+      cleanup();
+    });
+
+    // Client → Deepgram: forward audio data
+    server.addEventListener("message", (event) => {
+      if (!deepgram || deepgram.readyState !== WebSocket.READY_STATE_OPEN) {
+        return;
+      }
+
+      const data = event.data;
+
+      // Check for text control messages
+      if (typeof data === "string") {
+        try {
+          const msg = JSON.parse(data);
+          if (msg.type === "CloseStream") {
+            deepgram.send(JSON.stringify({ type: "CloseStream" }));
+            return;
+          }
+        } catch {
+          // Not JSON, ignore
+        }
+      }
+
+      // Forward binary audio data
+      deepgram.send(data);
+    });
+
+    // Client disconnected
+    server.addEventListener("close", () => {
+      // Send CloseStream to Deepgram before cleaning up
+      if (deepgram && deepgram.readyState === WebSocket.READY_STATE_OPEN) {
+        try {
+          deepgram.send(JSON.stringify({ type: "CloseStream" }));
+        } catch {
+          // Already closing
+        }
+      }
+      cleanup();
+    });
+
+    server.addEventListener("error", () => {
+      cleanup();
+    });
+  } catch (err: any) {
+    console.error("Failed to connect to Deepgram:", err);
+    try {
+      server.send(
+        JSON.stringify({ type: "error", message: `Failed to connect to Deepgram: ${err.message || "Unknown error"}` })
+      );
+      server.close(1011, "Deepgram connection failed");
+    } catch {
+      // Best effort
+    }
+  }
+
+  function cleanup() {
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
+    }
+    if (deepgram) {
+      try {
+        if (deepgram.readyState === WebSocket.READY_STATE_OPEN) {
+          deepgram.close();
+        }
+      } catch {
+        // Already closed
+      }
+      deepgram = null;
+    }
+    try {
+      if (server.readyState === WebSocket.READY_STATE_OPEN) {
+        server.close();
+      }
+    } catch {
+      // Already closed
+    }
+  }
+
+  // Return the client end of the WebSocket pair
+  return new Response(null, {
+    status: 101,
+    webSocket: client,
+  });
 }
 
 // ── Image storage ───────────────────────────────────────────
