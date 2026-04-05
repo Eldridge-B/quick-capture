@@ -133,8 +133,10 @@ async function handleMultiCapture(
 
   // ── Process images ──────────────────────────────────────
   const imageUrls: string[] = [];
+  let imageCount = 0;
   for (const [key, value] of formData.entries()) {
     if (key.startsWith("image_") && value instanceof File) {
+      imageCount++;
       const imageUrl = await storeImage(env, value);
       if (imageUrl) imageUrls.push(imageUrl);
     }
@@ -189,6 +191,14 @@ async function handleMultiCapture(
     pageContent = imageUrls
       .map((url) => `![Capture image](${url})`)
       .join("\n\n");
+  } else if (imageCount > 0) {
+    // Images were attached but R2 not configured — note it
+    const note = imageCount === 1 ? "1 image attached (storage not configured)" : `${imageCount} images attached (storage not configured)`;
+    if (payload.notes) {
+      payload.notes += `\n\n📷 ${note}`;
+    } else {
+      payload.notes = `📷 ${note}`;
+    }
   }
   if (audioUrl) {
     pageContent += `\n\n> 🎙 Audio stored: \`${audioUrl}\``;

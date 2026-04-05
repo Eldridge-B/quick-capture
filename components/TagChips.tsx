@@ -14,6 +14,7 @@ const CAPTURE_TAGS = [
   "Meditation",
   "Reading",
   "Nature",
+  "Coding",
 ] as const;
 
 export type CaptureTag = (typeof CAPTURE_TAGS)[number];

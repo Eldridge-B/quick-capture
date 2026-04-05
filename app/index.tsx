@@ -72,9 +72,24 @@ export default function CaptureScreen() {
   // ── Smart type defaults (P9 — Psychological Intent) ──────
   const typeManuallySet = useRef(false);
 
-  const handleTypeSelect = (t: CaptureType) => {
+  const handleTypeSelect = async (t: CaptureType) => {
     typeManuallySet.current = true;
     setType(t);
+    // Stop dictation if active
+    if (dictating) {
+      const audioUri = await stopDictation();
+      setDictating(false);
+      if (audioUri) {
+        setTranscribing(true);
+        setInterimText("transcribing...");
+        try {
+          const transcript = await transcribeAudioFile(audioUri);
+          setInterimText("");
+          if (transcript) setText((prev) => prev + (prev ? " " : "") + transcript);
+        } catch { setInterimText(""); }
+        finally { setTranscribing(false); }
+      }
+    }
   };
 
   const autoSelectType = (t: CaptureType) => {
@@ -431,11 +446,26 @@ export default function CaptureScreen() {
     }
   };
 
-  const toggleTag = useCallback((tag: CaptureTag) => {
+  const toggleTag = useCallback(async (tag: CaptureTag) => {
     setTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
-  }, []);
+    // Stop dictation if active
+    if (dictating) {
+      const audioUri = await stopDictation();
+      setDictating(false);
+      if (audioUri) {
+        setTranscribing(true);
+        setInterimText("transcribing...");
+        try {
+          const transcript = await transcribeAudioFile(audioUri);
+          setInterimText("");
+          if (transcript) setText((prev) => prev + (prev ? " " : "") + transcript);
+        } catch { setInterimText(""); }
+        finally { setTranscribing(false); }
+      }
+    }
+  }, [dictating]);
 
   const resetForm = () => {
     setText("");

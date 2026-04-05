@@ -41,6 +41,7 @@ export default function CaptureInput({
         placeholder={placeholder ?? "what's on your mind..."}
         placeholderTextColor={colors.text.muted}
         multiline
+        scrollEnabled
         textAlignVertical="top"
         autoFocus
         selectionColor={colors.accent.primary}
