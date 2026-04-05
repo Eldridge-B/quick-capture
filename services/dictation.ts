@@ -238,7 +238,7 @@ export async function startDictation(cb: DictationCallbacks): Promise<void> {
 
   // 3. Build WebSocket URL
   const wsUrl =
-    API_BASE.replace(/^http/, "ws") + "/ws/dictate?token=" + CAPTURE_SECRET;
+    API_BASE.replace(/^http/, "ws") + "/ws/dictate?token=" + encodeURIComponent(CAPTURE_SECRET);
 
   // 4. Open WebSocket
   const socket = new WebSocket(wsUrl);
