@@ -47,6 +47,7 @@ export default function CaptureInput({
         cursorColor={colors.accent.primary}
         onSelectionChange={handleSelectionChange}
         editable={editable !== false}
+        keyboardAppearance="dark"
       />
       {interimText ? (
         <Text style={styles.interimText}>{interimText}</Text>
@@ -64,7 +65,8 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   input: {
-    flex: 1,
+    flexShrink: 1,
+    flexGrow: 1,
     color: colors.text.primary,
     fontSize: typography.size.lg,
     fontFamily: typography.family.body,
@@ -75,7 +77,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border.subtle,
-    minHeight: 80,
+    minHeight: 60,
   },
   inputFocused: {
     borderColor: colors.accent.primary,

@@ -62,16 +62,16 @@ function formatDuration(s: number) {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: spacing.md,
-    maxHeight: 88,
+    marginTop: spacing.sm,
+    flexShrink: 0,
   },
   content: {
     gap: spacing.sm,
     paddingHorizontal: spacing.xxs,
   },
   card: {
-    width: 80,
-    height: 80,
+    width: 56,
+    height: 56,
     borderRadius: radii.sm,
     backgroundColor: colors.bg.raised,
     borderWidth: 1,
