@@ -188,6 +188,7 @@ async function handleMultiCapture(
   // ── Build page body content (for images) ────────────────
   let pageContent = "";
   if (imageUrls.length > 0) {
+    console.log(`[capture-multi] ${imageUrls.length} image(s) stored:`, imageUrls);
     pageContent = imageUrls
       .map((url) => `![Capture image](${url})`)
       .join("\n\n");
