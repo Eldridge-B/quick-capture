@@ -8,13 +8,10 @@ compatibility_date = "2024-12-01"
 #   CAPTURE_SECRET     — Shared secret for app ↔ worker auth
 #   ANTHROPIC_API_KEY  — Anthropic API key (for Lookup research)
 
-# Optional: R2 buckets for storing media files
-# Create these in Cloudflare dashboard, then uncomment:
+[[r2_buckets]]
+binding = "IMAGE_BUCKET"
+bucket_name = "quick-capture-images"
 
-# [[r2_buckets]]
-# binding = "AUDIO_BUCKET"
-# bucket_name = "quick-capture-audio"
-
-# [[r2_buckets]]
-# binding = "IMAGE_BUCKET"
-# bucket_name = "quick-capture-images"
+[[r2_buckets]]
+binding = "AUDIO_BUCKET"
+bucket_name = "quick-capture-audio"

@@ -428,7 +428,7 @@ async function storeImage(env: Env, file: File): Promise<string | null> {
 
   // Return the public URL — requires R2 public access or custom domain
   // Update this to match your R2 public URL pattern
-  return `https://YOUR_R2_PUBLIC_DOMAIN/${key}`;
+  return `https://pub-db0b292ea5ba47e0b2020c98b6adfbe1.r2.dev/${key}`;
 }
 
 // ── Background research (Anthropic API) ─────────────────────
