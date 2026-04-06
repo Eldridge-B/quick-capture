@@ -594,7 +594,8 @@ async function createNotionCapture(
   data: CaptureData,
   pageContent?: string
 ): Promise<{ id: string; url: string }> {
-  const today = new Date().toISOString().split("T")[0];
+  // Use America/Los_Angeles to match user's timezone
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
 
   const properties: Record<string, any> = {
     Capture: { title: [{ text: { content: data.title || "Untitled" } }] },
