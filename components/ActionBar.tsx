@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import { View, Text, StyleSheet, Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, spacing, radii, typography, shadows } from "@/theme";
 import { startRecording, stopRecording } from "@/services/audio";
 import AnimatedPressable from "@/components/AnimatedPressable";
@@ -154,7 +155,7 @@ export default function ActionBar({
           onPress={handleCamera}
           disabled={recording || busy}
         >
-          <Text style={styles.actionGlyph}>◎</Text>
+          <MaterialCommunityIcons name="camera-outline" size={19} color={colors.text.secondary} />
         </AnimatedPressable>
 
         <AnimatedPressable
@@ -162,7 +163,7 @@ export default function ActionBar({
           onPress={handlePickImage}
           disabled={recording || busy}
         >
-          <Text style={styles.actionGlyph}>◻</Text>
+          <MaterialCommunityIcons name="image-multiple-outline" size={19} color={colors.text.secondary} />
         </AnimatedPressable>
 
         <AnimatedPressable
