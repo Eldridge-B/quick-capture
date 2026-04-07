@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import React, { useState, useEffect, useMemo } from "react";
+import { View, Text, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors, spacing, radii, typography } from "@/theme";
+import { colors, spacing, typography } from "@/theme";
+import CardStack, { CardStackItem } from "@/components/CardStack";
 import AnimatedPressable from "@/components/AnimatedPressable";
 
 const CAPTURE_TAGS = [
@@ -30,9 +31,10 @@ interface TagChipsProps {
   selected: CaptureTag[];
   onToggle: (tag: CaptureTag) => void;
   disabled?: boolean;
+  compact?: boolean;
 }
 
-export default function TagChips({ selected, onToggle, disabled }: TagChipsProps) {
+export default function TagChips({ selected, onToggle, disabled, compact }: TagChipsProps) {
   const [expanded, setExpanded] = useState(false);
   const [usage, setUsage] = useState<TagUsage | null>(null);
 
@@ -47,67 +49,68 @@ export default function TagChips({ selected, onToggle, disabled }: TagChipsProps
     })();
   }, []);
 
+  const { visibleItems, hiddenCount } = useMemo(() => {
+    const allTags = [...CAPTURE_TAGS] as CaptureTag[];
+    const hasUsageData = usage && Object.values(usage).some((v) => v > 0);
+
+    const sorted = hasUsageData
+      ? allTags.sort((a, b) => ((usage?.[b] ?? 0) - (usage?.[a] ?? 0)))
+      : allTags;
+
+    if (expanded || !hasUsageData) {
+      return {
+        visibleItems: sorted.map((t) => ({ key: t, label: t.toLowerCase() })),
+        hiddenCount: 0,
+      };
+    }
+
+    const topTags = sorted.slice(0, VISIBLE_COUNT);
+    const hiddenSelected = selected.filter((t) => !topTags.includes(t));
+    const uniqueVisible = [...new Set([...topTags, ...hiddenSelected])];
+    const hidden = CAPTURE_TAGS.length - uniqueVisible.length;
+
+    return {
+      visibleItems: uniqueVisible.map((t) => ({ key: t, label: t.toLowerCase() })),
+      hiddenCount: hidden,
+    };
+  }, [usage, expanded, selected]);
+
   if (usage === null) {
-    return renderChips(CAPTURE_TAGS as unknown as CaptureTag[], selected, onToggle, null, false, () => {}, disabled);
+    const allItems = (CAPTURE_TAGS as unknown as CaptureTag[]).map((t) => ({
+      key: t,
+      label: t.toLowerCase(),
+    }));
+    return (
+      <View style={[styles.container, compact && styles.containerCompact, disabled && styles.disabled]}>
+        {!compact && <Text style={styles.sectionLabel}>tags</Text>}
+        <CardStack
+          items={allItems}
+          selectedKeys={selected}
+          onSelect={(key) => onToggle(key as CaptureTag)}
+          multiSelect
+          compact={compact}
+        />
+      </View>
+    );
   }
 
-  const hasUsageData = Object.values(usage).some((v) => v > 0);
-
-  if (!hasUsageData) {
-    return renderChips(CAPTURE_TAGS as unknown as CaptureTag[], selected, onToggle, null, false, () => {}, disabled);
-  }
-
-  const sorted = [...CAPTURE_TAGS].sort(
-    (a, b) => (usage[b] ?? 0) - (usage[a] ?? 0)
-  );
-
-  if (expanded) {
-    return renderChips(sorted, selected, onToggle, null, false, () => {}, disabled);
-  }
-
-  const topTags = sorted.slice(0, VISIBLE_COUNT);
-  const hiddenSelected = selected.filter((t) => !topTags.includes(t));
-  const uniqueVisible = [...new Set([...topTags, ...hiddenSelected])];
-  const hiddenCount = CAPTURE_TAGS.length - uniqueVisible.length;
-
-  return renderChips(uniqueVisible, selected, onToggle, hiddenCount, true, () => setExpanded(true), disabled);
-}
-
-function renderChips(
-  tags: CaptureTag[],
-  selected: CaptureTag[],
-  onToggle: (tag: CaptureTag) => void,
-  hiddenCount: number | null,
-  showExpander: boolean,
-  onExpand: () => void,
-  disabled?: boolean,
-) {
   return (
-    <View style={[styles.container, disabled && styles.disabled]}>
-      <Text style={styles.sectionLabel}>tags</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.chipRow}>
-          {tags.map((tag) => {
-            const isSelected = selected.includes(tag);
-            return (
-              <AnimatedPressable
-                key={tag}
-                style={[styles.tag, isSelected && styles.tagSelected]}
-                onPress={() => onToggle(tag)}
-              >
-                <Text style={[styles.tagText, isSelected && styles.tagTextSelected]}>
-                  {tag.toLowerCase()}
-                </Text>
-              </AnimatedPressable>
-            );
-          })}
-          {showExpander && hiddenCount !== null && hiddenCount > 0 && (
-            <AnimatedPressable style={[styles.tag, { borderStyle: "dashed" as any }]} onPress={onExpand}>
-              <Text style={styles.expanderText}>+{hiddenCount}</Text>
-            </AnimatedPressable>
-          )}
-        </View>
-      </ScrollView>
+    <View style={[styles.container, compact && styles.containerCompact, disabled && styles.disabled]}>
+      {!compact && <Text style={styles.sectionLabel}>tags</Text>}
+      <View style={styles.row}>
+        <CardStack
+          items={visibleItems}
+          selectedKeys={selected}
+          onSelect={(key) => onToggle(key as CaptureTag)}
+          multiSelect
+          compact={compact}
+        />
+        {!expanded && hiddenCount > 0 && (
+          <AnimatedPressable style={styles.expander} onPress={() => setExpanded(true)}>
+            <Text style={styles.expanderText}>+{hiddenCount}</Text>
+          </AnimatedPressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -127,9 +130,8 @@ export async function incrementTagUsage(tags: CaptureTag[]) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
+  container: { marginBottom: spacing.md },
+  containerCompact: { marginBottom: spacing.xs },
   sectionLabel: {
     color: colors.text.muted,
     fontSize: typography.size.xs,
@@ -139,37 +141,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     marginLeft: spacing.xs,
   },
-  chipRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-    paddingHorizontal: 2,
-  },
-  tag: {
+  row: { flexDirection: "row", alignItems: "center" },
+  expander: {
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    borderRadius: radii.sm,
-  },
-  tagSelected: {
-    borderColor: colors.accent.primary,
-  },
-  tagText: {
-    color: colors.text.muted,
-    fontSize: typography.size.md,
-    fontFamily: typography.family.mono,
-    letterSpacing: typography.tracking.normal,
-  },
-  tagTextSelected: {
-    color: colors.accent.primary,
+    marginLeft: spacing.sm,
   },
   expanderText: {
     color: colors.text.secondary,
     fontSize: typography.size.md,
     fontFamily: typography.family.mono,
   },
-  disabled: {
-    opacity: 0.4,
-    pointerEvents: "none" as const,
-  },
+  disabled: { opacity: 0.4, pointerEvents: "none" as const },
 });
