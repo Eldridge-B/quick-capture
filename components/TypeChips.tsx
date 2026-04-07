@@ -1,12 +1,8 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
-import { colors, spacing, typography, commonStyles } from "@/theme";
-import AnimatedPressable from "@/components/AnimatedPressable";
+import { View, Text, StyleSheet } from "react-native";
+import { spacing, commonStyles } from "@/theme";
+import CardStack, { CardStackItem } from "@/components/CardStack";
 
-/**
- * Capture types — matched to the Notion database.
- * No emoji. Just words.
- */
 const CAPTURE_TYPES = [
   "Idea",
   "Observation",
@@ -21,39 +17,28 @@ const CAPTURE_TYPES = [
 
 export type CaptureType = (typeof CAPTURE_TYPES)[number];
 
+const TYPE_ITEMS: CardStackItem[] = CAPTURE_TYPES.map((t) => ({
+  key: t,
+  label: t,
+}));
+
 interface TypeChipsProps {
   selected: CaptureType;
   onSelect: (type: CaptureType) => void;
   disabled?: boolean;
+  compact?: boolean;
 }
 
-export default function TypeChips({ selected, onSelect, disabled }: TypeChipsProps) {
+export default function TypeChips({ selected, onSelect, disabled, compact }: TypeChipsProps) {
   return (
-    <View style={[styles.container, disabled && styles.disabled]}>
-      <Text style={commonStyles.sectionLabel}>type</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.chipRow}>
-          {CAPTURE_TYPES.map((label) => (
-            <AnimatedPressable
-              key={label}
-              style={[
-                commonStyles.chip,
-                selected === label && commonStyles.chipSelected,
-              ]}
-              onPress={() => onSelect(label)}
-            >
-              <Text
-                style={[
-                  commonStyles.chipText,
-                  selected === label && commonStyles.chipTextSelected,
-                ]}
-              >
-                {label}
-              </Text>
-            </AnimatedPressable>
-          ))}
-        </View>
-      </ScrollView>
+    <View style={[styles.container, compact && styles.containerCompact, disabled && styles.disabled]}>
+      {!compact && <Text style={commonStyles.sectionLabel}>type</Text>}
+      <CardStack
+        items={TYPE_ITEMS}
+        selectedKeys={[selected]}
+        onSelect={(key) => onSelect(key as CaptureType)}
+        compact={compact}
+      />
     </View>
   );
 }
@@ -62,10 +47,8 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: spacing.md,
   },
-  chipRow: {
-    flexDirection: "row",
-    gap: spacing.xs,
-    paddingHorizontal: 2,
+  containerCompact: {
+    marginBottom: spacing.xs,
   },
   disabled: {
     opacity: 0.4,
