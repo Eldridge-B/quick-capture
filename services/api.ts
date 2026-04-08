@@ -6,13 +6,18 @@
  */
 import type { Attachment } from "@/components/AttachmentBar";
 
-export const API_BASE = "https://quick-capture-worker.quick-capture-worker.workers.dev";
+const API_BASE =
+  process.env.EXPO_PUBLIC_API_BASE ??
+  "https://quick-capture-worker.quick-capture-worker.workers.dev";
 
 /**
  * Shared secret for authenticating with the worker.
  * Must match the CAPTURE_SECRET set on the worker via `wrangler secret put`.
  */
-export const CAPTURE_SECRET = "###";
+const CAPTURE_SECRET = process.env.EXPO_PUBLIC_CAPTURE_SECRET ?? "";
+if (!CAPTURE_SECRET) {
+  console.warn("CAPTURE_SECRET is not set — API calls will fail auth");
+}
 
 const AUTH_HEADERS = {
   Authorization: `Bearer ${CAPTURE_SECRET}`,
@@ -28,7 +33,7 @@ export interface CapturePayload {
   nextStep?: string;
 }
 
-export interface CaptureResult {
+interface CaptureResult {
   id: string;
   url: string;
 }
@@ -135,7 +140,7 @@ export async function transcribeAudioFile(
 
 // ── Health check ────────────────────────────────────────────
 
-export async function healthCheck(): Promise<boolean> {
+async function healthCheck(): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/health`, {
       headers: AUTH_HEADERS,

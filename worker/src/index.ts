@@ -135,7 +135,7 @@ async function handleMultiCapture(
   const imageUrls: string[] = [];
   let imageCount = 0;
   for (const [key, value] of formData.entries()) {
-    if (key.startsWith("image_") && value instanceof File) {
+    if (key.startsWith("image_") && typeof value === "object" && "arrayBuffer" in value) {
       imageCount++;
       const imageUrl = await storeImage(env, value);
       if (imageUrl) imageUrls.push(imageUrl);
@@ -225,12 +225,22 @@ async function handleTranscribe(
     return json({ error: "Method not allowed" }, 405);
   }
 
-  const formData = await request.formData();
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch (err: any) {
+    console.error("[transcribe] Failed to parse formData:", err.message);
+    return json({ error: "Invalid multipart body" }, 400);
+  }
+
   const audioFile = formData.get("audio") as File | null;
 
   if (!audioFile) {
+    console.error("[transcribe] No audio file in formData. Keys:", [...formData.keys()]);
     return json({ error: "audio file required" }, 400);
   }
+
+  console.log(`[transcribe] Received: ${audioFile.name}, ${audioFile.type}, ${audioFile.size} bytes`);
 
   const transcript = await transcribeAudio(env, audioFile, false);
   return json({ transcript: transcript || "" });

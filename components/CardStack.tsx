@@ -1,11 +1,13 @@
-import React, { useRef, useCallback, useMemo, useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView, LayoutChangeEvent } from "react-native";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  Easing,
-} from "react-native-reanimated";
+import React, { useRef, useCallback, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  useWindowDimensions,
+} from "react-native";
 import { colors, spacing, radii, typography } from "@/theme";
 import AnimatedPressable from "@/components/AnimatedPressable";
 
@@ -26,125 +28,12 @@ interface CardStackProps {
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
-const ANIMATION_DURATION = 200;
-const ANIMATION_EASING = Easing.out(Easing.ease);
+const CARD_WIDTH = 120;
+const CARD_GAP = 10;
+const SNAP_INTERVAL = CARD_WIDTH + CARD_GAP;
+const CONTAINER_PAD = 40;
 
-/**
- * Visible pixels for cards at each stack position.
- *
- * Position 0 = selected (front). Its width is measured at runtime so we use
- * a sentinel here; it is never used in offset computation.
- * Position 1+: how many px remain visible (peeking) behind the card in front.
- */
-const VISIBLE_PX: readonly number[] = [
-  9999, // pos 0 — sentinel, not used in offset math
-  55,   // pos 1: ~45% covered
-  35,   // pos 2: ~60% covered
-  18,   // pos 3: ~80% covered
-  10,   // pos 4+: ~90% covered (sliver)
-];
-
-const OPACITIES: readonly number[] = [1.0, 0.8, 0.6, 0.35, 0.35];
-
-// ─── Offset math ──────────────────────────────────────────────────────────────
-
-/**
- * Compute the absolute x offset for a card at `positionIndex`.
- *
- * The selected card (pos 0) is at x = 0.
- * Card at pos 1 starts right after the full selected card: x = cardWidth.
- * Card at pos N starts at: cardWidth + sum(VISIBLE_PX[1] ... VISIBLE_PX[N-1])
- */
-function computeX(positionIndex: number, cardWidth: number): number {
-  if (positionIndex === 0) return 0;
-  let x = cardWidth;
-  for (let i = 1; i < positionIndex; i++) {
-    const idx = Math.min(i, VISIBLE_PX.length - 1);
-    x += VISIBLE_PX[idx];
-  }
-  return x;
-}
-
-// ─── Per-card animated wrapper ────────────────────────────────────────────────
-
-interface AnimatedCardProps {
-  item: CardStackItem;
-  positionIndex: number;
-  isSelected: boolean;
-  cardWidth: number;
-  onPress: () => void;
-  onMeasured?: (width: number) => void;
-  compact?: boolean;
-}
-
-function AnimatedCard({
-  item,
-  positionIndex,
-  isSelected,
-  cardWidth,
-  onPress,
-  onMeasured,
-  compact,
-}: AnimatedCardProps) {
-  const clampedPos = Math.min(positionIndex, OPACITIES.length - 1);
-
-  const xAnim = useSharedValue(computeX(positionIndex, cardWidth));
-  const opacityAnim = useSharedValue(OPACITIES[clampedPos]);
-
-  useEffect(() => {
-    const newClamp = Math.min(positionIndex, OPACITIES.length - 1);
-    xAnim.value = withTiming(computeX(positionIndex, cardWidth), {
-      duration: ANIMATION_DURATION,
-      easing: ANIMATION_EASING,
-    });
-    opacityAnim.value = withTiming(OPACITIES[newClamp], {
-      duration: ANIMATION_DURATION,
-      easing: ANIMATION_EASING,
-    });
-  }, [positionIndex, cardWidth]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: xAnim.value }],
-    opacity: opacityAnim.value,
-  }));
-
-  const handleLayout = useCallback(
-    (e: LayoutChangeEvent) => {
-      onMeasured?.(e.nativeEvent.layout.width);
-    },
-    [onMeasured]
-  );
-
-  return (
-    <Animated.View
-      style={[styles.cardAbsolute, animatedStyle]}
-      onLayout={onMeasured ? handleLayout : undefined}
-    >
-      <AnimatedPressable
-        onPress={onPress}
-        style={[
-          styles.card,
-          compact && styles.cardCompact,
-          isSelected ? styles.cardSelected : styles.cardUnselected,
-        ]}
-        pressScale={0.95}
-      >
-        <Text
-          style={[
-            styles.cardText,
-            compact && styles.cardTextCompact,
-            isSelected ? styles.cardTextSelected : styles.cardTextUnselected,
-          ]}
-          numberOfLines={1}
-        >
-          {item.label.toUpperCase()}
-        </Text>
-      </AnimatedPressable>
-    </Animated.View>
-  );
-}
-
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main component ──────────────────────────────────────────────────────────
 
 export default function CardStack({
   items,
@@ -154,62 +43,51 @@ export default function CardStack({
   compact = false,
 }: CardStackProps) {
   const scrollRef = useRef<ScrollView>(null);
+  const activeIndex = useRef(0);
+  const { width: screenWidth } = useWindowDimensions();
 
-  // For single-select: track display order so tapped card snaps to front.
-  // For multi-select: order stays fixed (cards toggle highlight in place).
-  const [order, setOrder] = useState<string[]>(() => items.map((i) => i.key));
+  // Trailing spacer so every card (including last) can reach the leftmost position
+  const trailingSpacer = Math.max(0, screenWidth - CONTAINER_PAD - CARD_WIDTH);
 
-  // Sync order when items list changes (keys added/removed externally)
+  // For single-select: scroll to current selection on mount
   useEffect(() => {
-    setOrder((prev) => {
-      const newKeySet = new Set(items.map((i) => i.key));
-      const prevKeySet = new Set(prev);
-      const retained = prev.filter((k) => newKeySet.has(k));
-      const added = items.map((i) => i.key).filter((k) => !prevKeySet.has(k));
-      return [...retained, ...added];
-    });
-  }, [items]);
+    if (multiSelect) return;
+    const idx = items.findIndex((i) => selectedKeys.includes(i.key));
+    if (idx > 0) {
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ x: idx * SNAP_INTERVAL, animated: false });
+      }, 50);
+    }
+  }, []);
 
-  const handlePress = useCallback(
-    (key: string) => {
-      if (!multiSelect) {
-        setOrder((prev) => {
-          if (prev[0] === key) return prev;
-          return [key, ...prev.filter((k) => k !== key)];
-        });
-        scrollRef.current?.scrollTo({ x: 0, animated: true });
+  // When scroll snaps, auto-select the frontmost card (single-select only)
+  const handleScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const x = e.nativeEvent.contentOffset.x;
+      const index = Math.round(x / SNAP_INTERVAL);
+      const clamped = Math.max(0, Math.min(index, items.length - 1));
+
+      if (clamped !== activeIndex.current) {
+        activeIndex.current = clamped;
+        if (!multiSelect) {
+          onSelect(items[clamped].key);
+        }
       }
-      onSelect(key);
+    },
+    [items, multiSelect, onSelect]
+  );
+
+  // Tap: multi-select toggles in place, single-select scrolls to card
+  const handleTap = useCallback(
+    (key: string, index: number) => {
+      if (multiSelect) {
+        onSelect(key);
+      } else {
+        scrollRef.current?.scrollTo({ x: index * SNAP_INTERVAL, animated: true });
+      }
     },
     [multiSelect, onSelect]
   );
-
-  // key → current position index
-  const positionMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    order.forEach((key, idx) => {
-      map[key] = idx;
-    });
-    return map;
-  }, [order]);
-
-  // Measure card width from the first card so we can compute absolute offsets
-  const [cardWidth, setCardWidth] = useState(0);
-
-  const handleMeasured = useCallback((width: number) => {
-    setCardWidth((prev) => (prev === 0 ? width : prev));
-  }, []);
-
-  // Total container width for the ScrollView's content
-  const containerWidth = useMemo(() => {
-    if (cardWidth === 0 || items.length === 0) return undefined;
-    let total = cardWidth;
-    for (let i = 1; i < items.length; i++) {
-      const idx = Math.min(i, VISIBLE_PX.length - 1);
-      total += VISIBLE_PX[idx];
-    }
-    return total;
-  }, [cardWidth, items.length]);
 
   return (
     <ScrollView
@@ -217,69 +95,64 @@ export default function CardStack({
       horizontal
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={[
-        styles.scrollContent,
-        compact && styles.scrollContentCompact,
-      ]}
+      snapToInterval={SNAP_INTERVAL}
+      decelerationRate="fast"
+      onMomentumScrollEnd={handleScrollEnd}
+      contentContainerStyle={styles.scrollContent}
     >
-      <View
-        style={[
-          styles.stackContainer,
-          containerWidth !== undefined && { width: containerWidth },
-        ]}
-      >
-        {items.map((item, itemIndex) => {
-          const positionIndex = positionMap[item.key] ?? itemIndex;
-          const isSelected = selectedKeys.includes(item.key);
+      {items.map((item, index) => {
+        const isSelected = selectedKeys.includes(item.key);
 
-          return (
-            <AnimatedCard
-              key={item.key}
-              item={item}
-              positionIndex={positionIndex}
-              isSelected={isSelected}
-              cardWidth={cardWidth}
-              onPress={() => handlePress(item.key)}
-              onMeasured={itemIndex === 0 && cardWidth === 0 ? handleMeasured : undefined}
-              compact={compact}
-            />
-          );
-        })}
-      </View>
+        return (
+          <AnimatedPressable
+            key={item.key}
+            style={[
+              styles.card,
+              compact && styles.cardCompact,
+              isSelected ? styles.cardSelected : styles.cardUnselected,
+            ]}
+            onPress={() => handleTap(item.key, index)}
+            pressScale={0.93}
+          >
+            <Text
+              style={[
+                styles.cardText,
+                compact && styles.cardTextCompact,
+                isSelected ? styles.cardTextSelected : styles.cardTextUnselected,
+              ]}
+              numberOfLines={1}
+            >
+              {item.label.toUpperCase()}
+            </Text>
+          </AnimatedPressable>
+        );
+      })}
+      <View style={{ width: trailingSpacer }} />
     </ScrollView>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   scrollContent: {
+    gap: CARD_GAP,
     paddingHorizontal: 2,
-    paddingBottom: 2,
-  },
-  scrollContentCompact: {
-    paddingBottom: 0,
-  },
-  stackContainer: {
-    position: "relative",
-    minHeight: 40,
-  },
-  cardAbsolute: {
-    position: "absolute",
-    top: 0,
   },
   card: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    width: CARD_WIDTH,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.sm,
-    borderWidth: 1,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
   },
   cardCompact: {
-    paddingVertical: spacing.xs + 2,
-    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   cardSelected: {
-    backgroundColor: "transparent",
+    backgroundColor: colors.accent.tertiary,
     borderColor: colors.accent.primary,
   },
   cardUnselected: {
@@ -290,12 +163,14 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     fontFamily: typography.family.mono,
     letterSpacing: typography.tracking.wide,
+    textTransform: "uppercase",
   },
   cardTextCompact: {
     fontSize: typography.size.sm,
   },
   cardTextSelected: {
     color: colors.accent.primary,
+    fontWeight: typography.weight.semibold,
   },
   cardTextUnselected: {
     color: colors.text.muted,

@@ -13,7 +13,7 @@ let recorder: InstanceType<typeof AudioModule.AudioRecorder> | null = null;
 /**
  * Request microphone permission and prepare audio mode.
  */
-export async function ensurePermissions(): Promise<boolean> {
+async function ensurePermissions(): Promise<boolean> {
   const { granted } = await AudioModule.requestRecordingPermissionsAsync();
   if (!granted) return false;
 

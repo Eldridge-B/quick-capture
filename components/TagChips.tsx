@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors, spacing, typography } from "@/theme";
-import CardStack, { CardStackItem } from "@/components/CardStack";
+import { colors, spacing, typography, commonStyles } from "@/theme";
+import CardStack from "@/components/CardStack";
 import AnimatedPressable from "@/components/AnimatedPressable";
 
 const CAPTURE_TAGS = [
@@ -20,7 +20,7 @@ const CAPTURE_TAGS = [
 
 export type CaptureTag = (typeof CAPTURE_TAGS)[number];
 
-export const TAG_USAGE_KEY = "quick-capture-tag-usage";
+const TAG_USAGE_KEY = "quick-capture-tag-usage";
 const VISIBLE_COUNT = 4;
 
 interface TagUsage {
@@ -82,7 +82,7 @@ export default function TagChips({ selected, onToggle, disabled, compact }: TagC
     }));
     return (
       <View style={[styles.container, compact && styles.containerCompact, disabled && styles.disabled]}>
-        {!compact && <Text style={styles.sectionLabel}>tags</Text>}
+        {!compact && <Text style={commonStyles.sectionLabel}>tags</Text>}
         <CardStack
           items={allItems}
           selectedKeys={selected}
@@ -96,7 +96,7 @@ export default function TagChips({ selected, onToggle, disabled, compact }: TagC
 
   return (
     <View style={[styles.container, compact && styles.containerCompact, disabled && styles.disabled]}>
-      {!compact && <Text style={styles.sectionLabel}>tags</Text>}
+      {!compact && <Text style={commonStyles.sectionLabel}>tags</Text>}
       <View style={styles.row}>
         <CardStack
           items={visibleItems}
@@ -132,15 +132,6 @@ export async function incrementTagUsage(tags: CaptureTag[]) {
 const styles = StyleSheet.create({
   container: { marginBottom: spacing.md },
   containerCompact: { marginBottom: spacing.xs },
-  sectionLabel: {
-    color: colors.text.muted,
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.medium,
-    textTransform: "uppercase" as const,
-    letterSpacing: typography.tracking.extraWide,
-    marginBottom: spacing.sm,
-    marginLeft: spacing.xs,
-  },
   row: { flexDirection: "row", alignItems: "center" },
   expander: {
     paddingVertical: spacing.sm,

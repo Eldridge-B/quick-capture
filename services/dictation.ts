@@ -15,7 +15,7 @@ import { AudioModule, setAudioModeAsync, RecordingPresets } from "expo-audio";
 
 export type DictationState = "idle" | "connecting" | "listening" | "error";
 
-export interface DictationCallbacks {
+interface DictationCallbacks {
   onInterimText: (text: string) => void;
   onFinalText: (text: string) => void;
   onUtteranceEnd: () => void;
@@ -33,7 +33,7 @@ function setState(next: DictationState): void {
   callbacks?.onStateChange(next);
 }
 
-export function getDictationState(): DictationState {
+function getDictationState(): DictationState {
   return state;
 }
 
