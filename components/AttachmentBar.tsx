@@ -12,23 +12,28 @@ export interface Attachment {
 interface AttachmentBarProps {
   attachments: Attachment[];
   onRemove: (index: number) => void;
+  compact?: boolean;
 }
 
 export default function AttachmentBar({
   attachments,
   onRemove,
+  compact,
 }: AttachmentBarProps) {
   if (attachments.length === 0) return null;
+
+  const cardSize = compact ? 36 : 56;
 
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
       style={styles.container}
       contentContainerStyle={styles.content}
     >
       {attachments.map((att, i) => (
-        <View key={`${att.type}-${i}`} style={styles.card}>
+        <View key={`${att.type}-${i}`} style={[styles.card, { width: cardSize, height: cardSize }]}>
           {att.type === "image" ? (
             <Image source={{ uri: att.uri }} style={styles.thumbnail} />
           ) : (
@@ -70,8 +75,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxs,
   },
   card: {
-    width: 56,
-    height: 56,
     borderRadius: radii.sm,
     backgroundColor: colors.bg.raised,
     borderWidth: 1,

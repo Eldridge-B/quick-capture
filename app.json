@@ -13,38 +13,20 @@
       "resizeMode": "contain",
       "backgroundColor": "#1a1a2e"
     },
+    "ios": {
+      "bundleIdentifier": "com.brent.quickcapture"
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a1a2e"
       },
       "package": "com.brent.quickcapture",
-      "intentFilters": [
-        {
-          "action": "SEND",
-          "category": [
-            "DEFAULT"
-          ],
-          "data": [
-            {
-              "mimeType": "text/plain"
-            },
-            {
-              "mimeType": "text/*"
-            }
-          ]
-        },
-        {
-          "action": "SEND",
-          "category": [
-            "DEFAULT"
-          ],
-          "data": [
-            {
-              "mimeType": "image/*"
-            }
-          ]
-        }
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "plugins": [
@@ -62,10 +44,26 @@
           "cameraPermission": "Quick Capture needs camera access to take photos."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-share-intent",
+        {
+          "androidIntentFilters": [
+            "text/*",
+            "image/*"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "681d6525-1280-4f0d-89ac-280cdad0e4bd"
+      }
+    },
+    "owner": "brenteldridge"
   }
 }

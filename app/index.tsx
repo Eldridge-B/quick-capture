@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  KeyboardAvoidingView,
   Platform,
   Keyboard,
 } from "react-native";
@@ -16,6 +15,7 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -23,18 +23,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import CaptureInput from "@/components/CaptureInput";
 import TypeChips, { CaptureType } from "@/components/TypeChips";
 import TagChips, { CaptureTag, incrementTagUsage } from "@/components/TagChips";
-import AttachmentBar, { Attachment } from "@/components/AttachmentBar";
+import { Attachment } from "@/components/AttachmentBar";
 import ActionBar from "@/components/ActionBar";
 import Tooltip from "@/components/Tooltip";
-import Waveform from "@/components/Waveform";
 import {
   submitCapture,
   submitMultiCapture,
   transcribeAudioFile,
   CapturePayload,
 } from "@/services/api";
-import { getSharedContent, onSharedContent } from "@/services/share-receiver";
-import { getAudioDuration } from "@/services/audio";
+import { useShareIntentContext } from "expo-share-intent";
+import { parseShareIntent } from "@/services/share-receiver";
+import { getAudioDuration, stopRecording as stopRecordingService } from "@/services/audio";
 import { startDictation, stopDictation, DictationState, isLagging } from "@/services/dictation";
 import { colors, spacing, typography, radii } from "@/theme";
 
@@ -57,6 +57,8 @@ export default function CaptureScreen() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [recording, setRecording] = useState(false);
   const [dictating, setDictating] = useState(false);
+  const dictatingRef = useRef(false);
+  const recordingRef = useRef(false);
   const [lagging, setLagging] = useState(false);
   const [dictationState, setDictationState] = useState<DictationState>("idle");
   const [interimText, setInterimText] = useState("");
@@ -64,19 +66,31 @@ export default function CaptureScreen() {
   const [showMicTooltip, setShowMicTooltip] = useState(false);
   const [saving, setSaving] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+
+  // ── Keyboard animation (synced with system 285ms curve) ──
+  const { height: kbHeight } = useReanimatedKeyboardAnimation();
   const [flash, setFlash] = useState<{
     kind: "success" | "error";
     message: string;
   } | null>(null);
 
-  // ── Smart type defaults (P9 — Psychological Intent) ──────
-  const typeManuallySet = useRef(false);
+  // Keep refs in sync so callbacks always read fresh state
+  useEffect(() => { dictatingRef.current = dictating; }, [dictating]);
+  useEffect(() => { recordingRef.current = recording; }, [recording]);
 
-  const handleTypeSelect = async (t: CaptureType) => {
-    typeManuallySet.current = true;
-    setType(t);
-    // Stop dictation if active
-    if (dictating) {
+  // ── Keyboard tracking ─────────────────────────────────────
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardOpen(false));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+
+  /** Stop any active voice activity (dictation or recording). Returns transcript if dictation was active. */
+  const stopVoiceActivity = async (): Promise<string | undefined> => {
+    if (dictatingRef.current) {
       const audioUri = await stopDictation();
       setDictating(false);
       if (audioUri) {
@@ -85,11 +99,33 @@ export default function CaptureScreen() {
         try {
           const transcript = await transcribeAudioFile(audioUri);
           setInterimText("");
-          if (transcript) setText((prev) => prev + (prev ? " " : "") + transcript);
-        } catch { setInterimText(""); }
-        finally { setTranscribing(false); }
+          return transcript || undefined;
+        } catch {
+          setInterimText("");
+        } finally {
+          setTranscribing(false);
+        }
       }
     }
+    if (recordingRef.current) {
+      const uri = await stopRecordingService();
+      setRecording(false);
+      if (uri) {
+        const duration = await getAudioDuration(uri);
+        setAttachments((prev) => [...prev, { type: "audio", uri, duration }]);
+      }
+    }
+    return undefined;
+  };
+
+  // ── Smart type defaults (P9 — Psychological Intent) ──────
+  const typeManuallySet = useRef(false);
+
+  const handleTypeSelect = async (t: CaptureType) => {
+    typeManuallySet.current = true;
+    setType(t);
+    const transcript = await stopVoiceActivity();
+    if (transcript) setText((prev) => prev + (prev ? " " : "") + transcript);
   };
 
   const autoSelectType = (t: CaptureType) => {
@@ -204,23 +240,15 @@ export default function CaptureScreen() {
     return () => clearInterval(interval);
   }, [dictating]);
 
-  // ── Share intent handling ──────────────────────────────────
+  // ── Share intent handling (expo-share-intent) ──────────────
+  const { hasShareIntent, shareIntent, resetShareIntent } =
+    useShareIntentContext();
+
   useEffect(() => {
-    (async () => {
-      const shared = await getSharedContent();
-      if (shared) applySharedContent(shared);
-    })();
+    if (!hasShareIntent) return;
+    const content = parseShareIntent(shareIntent);
+    if (!content) return;
 
-    const unsub = onSharedContent((content) => applySharedContent(content));
-    return unsub;
-  }, []);
-
-  const applySharedContent = (content: {
-    text?: string;
-    url?: string;
-    imageUri?: string;
-    type: string;
-  }) => {
     if (content.text) setText(content.text);
     else if (content.url) setText(content.url);
 
@@ -230,7 +258,9 @@ export default function CaptureScreen() {
         { type: "image", uri: content.imageUri! },
       ]);
     }
-  };
+
+    resetShareIntent();
+  }, [hasShareIntent]);
 
   // Flush offline queue on open
   useEffect(() => {
@@ -312,35 +342,19 @@ export default function CaptureScreen() {
 
   const handleDictationToggle = async () => {
     if (dictating) {
-      // Stop recording, transcribe, insert text at cursor
-      const audioUri = await stopDictation();
-      setDictating(false);
-
-      if (audioUri) {
-        setTranscribing(true);
-        setInterimText("transcribing...");
-        try {
-          const transcript = await transcribeAudioFile(audioUri);
-          setInterimText("");
-          if (transcript) {
-            setText((prev) => {
-              const { start, end } = cursorPos.current;
-              const before = prev.slice(0, start);
-              const after = prev.slice(end);
-              const needsSpace = before.length > 0 && !before.endsWith(" ") && !transcript.startsWith(" ");
-              const inserted = (needsSpace ? " " : "") + transcript;
-              const newPos = start + inserted.length;
-              cursorPos.current = { start: newPos, end: newPos };
-              return before + inserted + after;
-            });
-          }
-        } catch (err: any) {
-          setInterimText("");
-          console.error("[dictation] transcribe error:", err);
-          showFlash("error", `Couldn't transcribe: ${err.message || err}`);
-        } finally {
-          setTranscribing(false);
-        }
+      const transcript = await stopVoiceActivity();
+      if (transcript) {
+        // Insert at cursor position
+        setText((prev) => {
+          const { start, end } = cursorPos.current;
+          const before = prev.slice(0, start);
+          const after = prev.slice(end);
+          const needsSpace = before.length > 0 && !before.endsWith(" ") && !transcript.startsWith(" ");
+          const inserted = (needsSpace ? " " : "") + transcript;
+          const newPos = start + inserted.length;
+          cursorPos.current = { start: newPos, end: newPos };
+          return before + inserted + after;
+        });
       }
       return;
     }
@@ -450,22 +464,9 @@ export default function CaptureScreen() {
     setTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
-    // Stop dictation if active
-    if (dictating) {
-      const audioUri = await stopDictation();
-      setDictating(false);
-      if (audioUri) {
-        setTranscribing(true);
-        setInterimText("transcribing...");
-        try {
-          const transcript = await transcribeAudioFile(audioUri);
-          setInterimText("");
-          if (transcript) setText((prev) => prev + (prev ? " " : "") + transcript);
-        } catch { setInterimText(""); }
-        finally { setTranscribing(false); }
-      }
-    }
-  }, [dictating]);
+    const transcript = await stopVoiceActivity();
+    if (transcript) setText((prev) => prev + (prev ? " " : "") + transcript);
+  }, []);
 
   const resetForm = () => {
     setText("");
@@ -479,17 +480,18 @@ export default function CaptureScreen() {
   const canSave =
     (text.trim().length > 0 || attachments.length > 0) && !saving;
 
+  // Animated style: the whole content area shifts up with the keyboard
+  const kbAnimatedStyle = useAnimatedStyle(() => ({
+    paddingBottom: -kbHeight.value, // kbHeight is negative, so negate it
+  }));
+
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>capture</Text>
+        <View style={[styles.container, keyboardOpen && styles.containerCompact]}>
+        {/* Header — shrinks when keyboard is open */}
+        <View style={[styles.header, keyboardOpen && styles.headerCompact]}>
+          <Text style={[styles.title, keyboardOpen && styles.titleCompact]}>capture</Text>
           {/* Status badges */}
-          {dictating && <Waveform active={dictationState === "listening"} />}
           {recording && !dictating && (
             <View style={styles.recordingBadge}>
               <Animated.View style={[styles.recordingDot, pulseStyle]} />
@@ -533,18 +535,19 @@ export default function CaptureScreen() {
           </Animated.View>
         )}
 
-        {/* Text input + attachments share flex space */}
-        <View style={styles.inputArea}>
+        {/* Text input — attachments live inside the box */}
+        <View style={[styles.inputArea, keyboardOpen && styles.inputAreaCompact]}>
           <CaptureInput
             value={text}
             onChangeText={setText}
             editable={!saving}
             interimText={interimText}
             onCursorChange={(pos) => { cursorPos.current = pos; }}
-          />
-          <AttachmentBar
+            dictating={dictating}
+            dictationActive={dictationState === "listening"}
+            compact={keyboardOpen}
             attachments={attachments}
-            onRemove={handleRemoveAttachment}
+            onRemoveAttachment={handleRemoveAttachment}
           />
         </View>
 
@@ -567,32 +570,35 @@ export default function CaptureScreen() {
           </View>
         )}
 
-        {/* Metadata chips */}
-        <View style={styles.metadata}>
-          <TypeChips selected={type} onSelect={handleTypeSelect} disabled={saving} />
-          <TagChips selected={tags} onToggle={toggleTag} disabled={saving} />
-        </View>
+        {/* Bottom section — slides up in sync with keyboard */}
+        <Animated.View style={kbAnimatedStyle}>
+          {/* Metadata chips */}
+          <View style={[styles.metadata, keyboardOpen && styles.metadataCompact]}>
+            <TypeChips selected={type} onSelect={handleTypeSelect} disabled={saving} compact={keyboardOpen} />
+            <TagChips selected={tags} onToggle={toggleTag} disabled={saving} compact={keyboardOpen} />
+          </View>
 
-        {/* Action bar: camera, gallery, mic, save */}
-        <View style={{ position: "relative" }}>
-          <ActionBar
-            recording={recording}
-            dictating={dictating}
-            busy={saving}
-            canSave={canSave}
-            onImagePicked={handleImagePicked}
-            onRecordingStart={handleRecordingStart}
-            onRecordingComplete={handleRecordingComplete}
-            onDictationToggle={handleDictationToggle}
-            onSave={handleSave}
-          />
-          <Tooltip
-            text="hold for audio"
-            visible={showMicTooltip}
-            onDismiss={() => setShowMicTooltip(false)}
-          />
+          {/* Action bar: camera, gallery, mic, save */}
+          <View style={{ position: "relative" }}>
+            <ActionBar
+              recording={recording}
+              dictating={dictating}
+              busy={saving}
+              canSave={canSave}
+              onImagePicked={handleImagePicked}
+              onRecordingStart={handleRecordingStart}
+              onRecordingComplete={handleRecordingComplete}
+              onDictationToggle={handleDictationToggle}
+              onSave={handleSave}
+            />
+            <Tooltip
+              text="hold for audio"
+              visible={showMicTooltip}
+              onDismiss={() => setShowMicTooltip(false)}
+            />
+          </View>
+        </Animated.View>
         </View>
-      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -610,11 +616,19 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.sm,
   },
+  containerCompact: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "baseline",
     marginBottom: spacing.xxl,
+  },
+  headerCompact: {
+    marginBottom: spacing.sm,
   },
   title: {
     color: colors.text.primary,
@@ -623,6 +637,9 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.normal,
     fontStyle: "italic",
     letterSpacing: typography.tracking.tight,
+  },
+  titleCompact: {
+    fontSize: typography.size.xl,
   },
   recordingBadge: {
     flexDirection: "row",
@@ -666,6 +683,9 @@ const styles = StyleSheet.create({
     flex: 1,
     marginBottom: spacing.lg,
   },
+  inputAreaCompact: {
+    marginBottom: spacing.xs,
+  },
   laggingText: {
     color: colors.text.muted,
     fontSize: typography.size.xs,
@@ -691,5 +711,8 @@ const styles = StyleSheet.create({
   },
   metadata: {
     marginBottom: spacing.sm,
+  },
+  metadataCompact: {
+    marginBottom: 0,
   },
 });

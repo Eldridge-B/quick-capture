@@ -12,6 +12,13 @@ web-build/
 .env
 .env.local
 
+# Android build artifacts
+android/
+
+# Superpowers plugin files
+.superpowers/
+docs/superpowers/
+
 # Worker
 worker/node_modules/
 worker/.wrangler/

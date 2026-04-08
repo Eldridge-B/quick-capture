@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { TextInput, StyleSheet, View, Text } from "react-native";
+import { TextInput, StyleSheet, View, Text, useWindowDimensions } from "react-native";
 import { colors, spacing, radii, typography } from "@/theme";
+import Waveform from "@/components/Waveform";
+import AttachmentBar, { Attachment } from "@/components/AttachmentBar";
 
 interface CaptureInputProps {
   value: string;
@@ -10,6 +12,11 @@ interface CaptureInputProps {
   editable?: boolean;
   interimText?: string;
   onCursorChange?: (pos: { start: number; end: number }) => void;
+  dictating?: boolean;
+  dictationActive?: boolean;
+  compact?: boolean;
+  attachments?: Attachment[];
+  onRemoveAttachment?: (index: number) => void;
 }
 
 export default function CaptureInput({
@@ -20,9 +27,18 @@ export default function CaptureInput({
   editable,
   interimText,
   onCursorChange,
+  dictating,
+  dictationActive,
+  compact,
+  attachments,
+  onRemoveAttachment,
 }: CaptureInputProps) {
   const [focused, setFocused] = useState(false);
+  const { height: screenHeight } = useWindowDimensions();
   const charCount = value.length;
+  const hasAttachments = attachments && attachments.length > 0;
+  // Cap text box at ~45% of screen so chips + action bar always stay visible
+  const maxInputHeight = Math.round(screenHeight * 0.45);
 
   const handleSelectionChange = (e: any) => {
     const { start, end } = e.nativeEvent.selection;
@@ -33,7 +49,7 @@ export default function CaptureInput({
     <View style={styles.container}>
       <TextInput
         ref={ref}
-        style={[styles.input, focused && styles.inputFocused]}
+        style={[styles.input, { maxHeight: maxInputHeight }, focused && styles.inputFocused, compact && styles.inputCompact]}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         value={value}
@@ -50,10 +66,24 @@ export default function CaptureInput({
         editable={editable !== false}
         keyboardAppearance="dark"
       />
+      {dictating && (
+        <View style={styles.waveformContainer}>
+          <Waveform active={dictationActive ?? false} />
+        </View>
+      )}
       {interimText ? (
         <Text style={styles.interimText}>{interimText}</Text>
       ) : null}
-      {charCount > 0 && (
+      {hasAttachments && onRemoveAttachment && (
+        <View style={styles.attachmentContainer}>
+          <AttachmentBar
+            attachments={attachments}
+            onRemove={onRemoveAttachment}
+            compact={compact}
+          />
+        </View>
+      )}
+      {charCount > 0 && !dictating && !hasAttachments && (
         <Text style={styles.charCount}>{charCount}</Text>
       )}
     </View>
@@ -66,8 +96,6 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   input: {
-    flexShrink: 1,
-    flexGrow: 1,
     color: colors.text.primary,
     fontSize: typography.size.lg,
     fontFamily: typography.family.body,
@@ -83,6 +111,10 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderColor: colors.accent.primary,
   },
+  inputCompact: {
+    padding: spacing.md,
+    paddingTop: spacing.lg,
+  },
   charCount: {
     position: "absolute",
     bottom: spacing.md,
@@ -91,6 +123,18 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     fontFamily: typography.family.mono,
     letterSpacing: typography.tracking.wide,
+  },
+  waveformContainer: {
+    position: "absolute",
+    top: spacing.md,
+    right: spacing.md,
+    zIndex: 1,
+  },
+  attachmentContainer: {
+    position: "absolute",
+    bottom: spacing.sm,
+    left: spacing.sm,
+    zIndex: 2,
   },
   interimText: {
     color: colors.accent.primary,
