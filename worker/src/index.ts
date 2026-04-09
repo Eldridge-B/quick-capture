@@ -305,6 +305,11 @@ async function handleCapture(
     ctx.waitUntil(backgroundResearch(env, result.id, body.notes));
   }
 
+  // Trigger background auto-categorization if user didn't set chips
+  if (body.autoClassify && body.notes) {
+    ctx.waitUntil(autoClassify(env, result.id, body.notes));
+  }
+
   return json(result);
 }
 
@@ -407,6 +412,12 @@ async function handleMultiCapture(
   // Background research for Lookup captures
   if (payload.type === "Lookup" && finalNotes) {
     ctx.waitUntil(backgroundResearch(env, result.id, finalNotes));
+  }
+
+  // Trigger background auto-categorization if user didn't set chips
+  if (payload.autoClassify && (payload.notes || transcription)) {
+    const classifyText = payload.notes || transcription || "";
+    ctx.waitUntil(autoClassify(env, result.id, classifyText));
   }
 
   return json(result);
