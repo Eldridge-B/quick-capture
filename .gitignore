@@ -15,10 +15,9 @@ web-build/
 # Android build artifacts
 android/
 
-# Superpowers plugin files
+# Superpowers plugin scratch files
 .superpowers/
 docs/superpowers/brainstorm/
-docs/superpowers/plans/
 
 # Worker
 worker/node_modules/
