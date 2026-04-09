@@ -17,6 +17,7 @@ android/
 
 # Superpowers plugin scratch files
 .superpowers/
+.worktrees/
 docs/superpowers/brainstorm/
 
 # Worker
