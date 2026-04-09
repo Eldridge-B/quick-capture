@@ -118,6 +118,123 @@ async function fetchFewShotExamples(env: Env): Promise<string> {
   }
 }
 
+async function autoClassify(
+  env: Env,
+  capturePageId: string,
+  captureText: string
+): Promise<void> {
+  try {
+    const examples = await fetchFewShotExamples(env);
+
+    const systemPrompt = `You classify short text captures into Type and Tags for a personal note-taking app.
+
+Types (pick exactly one):
+- Observation: noticing something in the world
+- Moment: a personal experience worth remembering
+- Idea: a thought about something to create or try
+- Emotion: a feeling or emotional state
+- Overheard: something someone else said
+- Image/Scene: a visual description
+- Question: something to look into later
+- Dream: a dream or aspiration
+
+Tags (pick zero or more, only if clearly relevant):
+Daughters, School, Writing Material, Gut Health, Attachment, House/Property, Meditation, Reading, Nature
+
+${examples ? `Examples from recent captures:\n\n${examples}` : ""}`;
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-haiku-20241022",
+        max_tokens: 128,
+        system: systemPrompt,
+        tools: [
+          {
+            name: "classify_capture",
+            description: "Classify a text capture into type and tags",
+            input_schema: {
+              type: "object",
+              properties: {
+                type: {
+                  type: "string",
+                  enum: [
+                    "Observation", "Moment", "Idea", "Emotion",
+                    "Overheard", "Image/Scene", "Question", "Dream",
+                  ],
+                },
+                tags: {
+                  type: "array",
+                  items: {
+                    type: "string",
+                    enum: [
+                      "Daughters", "School", "Writing Material", "Gut Health",
+                      "Attachment", "House/Property", "Meditation", "Reading", "Nature",
+                    ],
+                  },
+                },
+              },
+              required: ["type", "tags"],
+            },
+          },
+        ],
+        tool_choice: { type: "tool", name: "classify_capture" },
+        messages: [
+          {
+            role: "user",
+            content: `Classify this capture:\n\n"${captureText}"`,
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("[autoClassify] Haiku API error:", await res.text());
+      return;
+    }
+
+    const result = await res.json<{
+      content: Array<{ type: string; input?: { type: string; tags: string[] } }>;
+    }>();
+
+    const toolUse = result.content?.find((c) => c.type === "tool_use");
+    if (!toolUse?.input) {
+      console.error("[autoClassify] No tool_use in response");
+      return;
+    }
+
+    const { type, tags } = toolUse.input;
+    console.log(`[autoClassify] Result: type="${type}", tags=${JSON.stringify(tags)}`);
+
+    // PATCH the Notion page with classified Type and Tags
+    const patchRes = await fetch(`https://api.notion.com/v1/pages/${capturePageId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${env.NOTION_API_KEY}`,
+        "Notion-Version": NOTION_API_VERSION,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        properties: {
+          Type: { select: { name: type } },
+          Tags: { multi_select: tags.map((t: string) => ({ name: t })) },
+        },
+      }),
+    });
+
+    if (!patchRes.ok) {
+      console.error("[autoClassify] Notion PATCH failed:", await patchRes.text());
+    }
+  } catch (err) {
+    console.error("[autoClassify] Failed:", err);
+  }
+}
+
 // ── Entry point ─────────────────────────────────────────────
 
 export default {
