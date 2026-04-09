@@ -31,6 +31,7 @@ export interface CapturePayload {
   priority: string;
   connectedTo?: string;
   nextStep?: string;
+  autoClassify?: boolean;
 }
 
 interface CaptureResult {

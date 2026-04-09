@@ -139,9 +139,11 @@ export default function CaptureScreen() {
 
   // ── Smart type defaults (P9 — Psychological Intent) ──────
   const typeManuallySet = useRef(false);
+  const chipsTouched = useRef(false);
 
   const handleTypeSelect = async (t: CaptureType) => {
     typeManuallySet.current = true;
+    chipsTouched.current = true;
     setType(t);
     const transcript = await stopVoiceActivity();
     if (transcript) setText((prev) => prev + (prev ? " " : "") + transcript);
@@ -433,6 +435,7 @@ export default function CaptureScreen() {
       type,
       tags,
       priority: "🟢 Low",
+      autoClassify: !chipsTouched.current,
     };
 
     // Auto-populate Next Step for Lookup captures
@@ -480,6 +483,7 @@ export default function CaptureScreen() {
   };
 
   const toggleTag = useCallback(async (tag: CaptureTag) => {
+    chipsTouched.current = true;
     setTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
@@ -493,6 +497,7 @@ export default function CaptureScreen() {
     setTags([]);
     setAttachments([]);
     typeManuallySet.current = false;
+    chipsTouched.current = false;
     AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
   };
 
