@@ -38,6 +38,86 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
+// ── Auto-categorization cache ──────────────────────────────
+
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+let cachedExamples: string = "";
+let cacheTimestamp: number = 0;
+
+async function fetchFewShotExamples(env: Env): Promise<string> {
+  if (cachedExamples && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
+    return cachedExamples;
+  }
+
+  try {
+    const res = await fetch(
+      `https://api.notion.com/v1/databases/${CAPTURES_DATABASE_ID}/query`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.NOTION_API_KEY}`,
+          "Notion-Version": NOTION_API_VERSION,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          filter: {
+            and: [
+              { property: "Type", select: { is_not_empty: true } },
+              { property: "Tags", multi_select: { is_not_empty: true } },
+              { property: "Notes", rich_text: { is_not_empty: true } },
+            ],
+          },
+          sorts: [{ property: "Date Captured", direction: "descending" }],
+          page_size: 20,
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      console.error("[autoClassify] Notion query failed:", await res.text());
+      return cachedExamples;
+    }
+
+    const data = await res.json<{
+      results: Array<{
+        properties: {
+          Type: { select: { name: string } | null };
+          Tags: { multi_select: Array<{ name: string }> };
+          Notes: { rich_text: Array<{ plain_text: string }> };
+        };
+      }>;
+    }>();
+
+    // Pick one example per Type (up to 8) for taxonomy coverage
+    const seenTypes = new Set<string>();
+    const examples: string[] = [];
+
+    for (const page of data.results) {
+      const type = page.properties.Type?.select?.name;
+      const tags = page.properties.Tags?.multi_select?.map((t) => t.name) ?? [];
+      const notes = page.properties.Notes?.rich_text?.map((t) => t.plain_text).join("") ?? "";
+
+      if (!type || !notes || seenTypes.has(type)) continue;
+      seenTypes.add(type);
+
+      const preview = notes.length > 120 ? notes.slice(0, 117) + "..." : notes;
+      examples.push(
+        `Capture: "${preview}"\n→ {"type": "${type}", "tags": ${JSON.stringify(tags)}}`
+      );
+
+      if (examples.length >= 8) break;
+    }
+
+    cachedExamples = examples.join("\n\n");
+    cacheTimestamp = Date.now();
+    console.log(`[autoClassify] Cached ${examples.length} few-shot examples`);
+    return cachedExamples;
+  } catch (err) {
+    console.error("[autoClassify] Failed to fetch examples:", err);
+    return cachedExamples;
+  }
+}
+
 // ── Entry point ─────────────────────────────────────────────
 
 export default {
