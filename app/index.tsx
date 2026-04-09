@@ -32,6 +32,8 @@ import {
   transcribeAudioFile,
   CapturePayload,
 } from "@/services/api";
+import { useLocalSearchParams } from "expo-router";
+import * as Clipboard from "expo-clipboard";
 import { useShareIntentContext } from "expo-share-intent";
 import { parseShareIntent } from "@/services/share-receiver";
 import { getAudioDuration, stopRecording as stopRecordingService } from "@/services/audio";
@@ -59,6 +61,7 @@ export default function CaptureScreen() {
   const [dictating, setDictating] = useState(false);
   const dictatingRef = useRef(false);
   const recordingRef = useRef(false);
+  const { action } = useLocalSearchParams<{ action?: string }>();
   const [lagging, setLagging] = useState(false);
   const [dictationState, setDictationState] = useState<DictationState>("idle");
   const [interimText, setInterimText] = useState("");
@@ -87,6 +90,20 @@ export default function CaptureScreen() {
     const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardOpen(false));
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
+
+  // ── Shortcut action handling ────────────────────────────
+  useEffect(() => {
+    if (!action) return;
+    const timer = setTimeout(async () => {
+      if (action === "voice") {
+        handleDictationToggle();
+      } else if (action === "paste") {
+        const clip = await Clipboard.getStringAsync();
+        if (clip) setText((prev) => prev + (prev ? "\n" : "") + clip);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [action]);
 
   /** Stop any active voice activity (dictation or recording). Returns transcript if dictation was active. */
   const stopVoiceActivity = async (): Promise<string | undefined> => {
