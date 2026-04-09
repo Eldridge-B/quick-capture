@@ -100,8 +100,10 @@ export default function CaptureScreen() {
           const transcript = await transcribeAudioFile(audioUri);
           setInterimText("");
           return transcript || undefined;
-        } catch {
+        } catch (err: any) {
+          console.error("[dictation] transcribe failed:", err);
           setInterimText("");
+          showFlash("error", `Transcribe failed: ${err.message || err}`);
         } finally {
           setTranscribing(false);
         }

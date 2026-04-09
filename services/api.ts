@@ -123,9 +123,11 @@ export async function transcribeAudioFile(
     name: `dictation.${ext}`,
   } as any);
 
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${CAPTURE_SECRET}`);
   const res = await fetch(`${API_BASE}/transcribe`, {
     method: "POST",
-    headers: AUTH_HEADERS,
+    headers,
     body: formData,
   });
 

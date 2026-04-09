@@ -96,6 +96,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   input: {
+    flex: 1,
     color: colors.text.primary,
     fontSize: typography.size.lg,
     fontFamily: typography.family.body,
