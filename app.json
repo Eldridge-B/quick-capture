@@ -45,6 +45,7 @@
         }
       ],
       "expo-asset",
+      "expo-quick-actions",
       [
         "expo-share-intent",
         {
