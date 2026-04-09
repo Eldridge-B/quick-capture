@@ -598,6 +598,7 @@ interface CaptureData {
   priority: string;
   connectedTo?: string;
   nextStep?: string;
+  autoClassify?: boolean;
 }
 
 async function createNotionCapture(
