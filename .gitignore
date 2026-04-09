@@ -17,7 +17,8 @@ android/
 
 # Superpowers plugin files
 .superpowers/
-docs/superpowers/
+docs/superpowers/brainstorm/
+docs/superpowers/plans/
 
 # Worker
 worker/node_modules/
