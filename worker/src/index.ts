@@ -151,7 +151,7 @@ ${examples ? `Examples from recent captures:\n\n${examples}` : ""}`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-3-5-haiku-20241022",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 128,
         system: systemPrompt,
         tools: [
@@ -669,16 +669,16 @@ async function backgroundResearch(
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1024,
-        system: `You are a research assistant. The user captured a quick note while busy (likely driving, walking, etc.) and needs you to find the reference they're describing.
+        system: `You are a research assistant. Today's date is ${new Date().toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "long", day: "numeric" })}. The user captured a quick note while busy (likely driving, walking, etc.) and needs you to find the reference they're describing.
 
 Your job:
-1. Identify what they're looking for (podcast episode, article, book passage, etc.)
-2. Provide the most likely source with a URL if possible
+1. If the user already provided the source (author, title, publication), extract and format it — don't go hunting for a different one
+2. If the reference is vague, identify the most likely source with a URL if possible
 3. If they mentioned a specific quote or passage, try to find or reconstruct it
-4. Be concise — this will be appended to a Notion capture.
+4. Be concise — this will be appended to a Notion capture
 
 Format your response as:
-**Source:** [what you found]
+**Source:** [what you found or what the user provided]
 **URL:** [link if available]
 **Relevant passage/info:** [the specific content they were looking for]
 **Confidence:** [High/Medium/Low — how sure you are this is the right reference]`,

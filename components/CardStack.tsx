@@ -77,12 +77,14 @@ export default function CardStack({
     [items, multiSelect, onSelect]
   );
 
-  // Tap: multi-select toggles in place, single-select scrolls to card
+  // Tap: multi-select toggles in place, single-select scrolls to card + selects
   const handleTap = useCallback(
     (key: string, index: number) => {
       if (multiSelect) {
         onSelect(key);
       } else {
+        onSelect(key);
+        activeIndex.current = index;
         scrollRef.current?.scrollTo({ x: index * SNAP_INTERVAL, animated: true });
       }
     },
