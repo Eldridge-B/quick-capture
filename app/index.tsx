@@ -411,13 +411,37 @@ export default function CaptureScreen() {
 
   // ── Save ──────────────────────────────────────────────────
   const handleSave = async () => {
-    const content = text.trim();
+    // In-recording Capture: tap stops voice, transcribes, then saves in one shot.
+    // Fire haptic immediately on tap so the user gets confirmation before the
+    // transcribe roundtrip — separate from the haptic below for normal saves.
+    let appendedTranscript: string | undefined;
+    if (dictatingRef.current || recordingRef.current) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      appendedTranscript = await stopVoiceActivity();
+    }
+
+    // Compute final text from current text + any newly transcribed content.
+    // Don't rely on `text` state after setText — setState is async; use the
+    // local merged value for both setText (UI) and the save payload.
+    let finalText = text;
+    if (appendedTranscript) {
+      const needsSpace =
+        finalText.length > 0 &&
+        !finalText.endsWith(" ") &&
+        !appendedTranscript.startsWith(" ");
+      finalText = finalText + (needsSpace ? " " : "") + appendedTranscript;
+      setText(finalText);
+    }
+
+    const content = finalText.trim();
     const hasContent = content.length > 0 || attachments.length > 0;
     if (!hasContent) return;
 
     Keyboard.dismiss();
     setSaving(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (!appendedTranscript) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
 
     // Build title from text or attachment description
     let title: string;
@@ -502,7 +526,7 @@ export default function CaptureScreen() {
   };
 
   const canSave =
-    (text.trim().length > 0 || attachments.length > 0) && !saving;
+    (text.trim().length > 0 || attachments.length > 0 || dictating || recording) && !saving;
 
   // Animated style: the whole content area shifts up with the keyboard
   const kbAnimatedStyle = useAnimatedStyle(() => ({

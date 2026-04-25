@@ -708,8 +708,9 @@ Format your response as:
 
     if (!researchText) return;
 
-    // Append research results to the Notion page
-    // We use the Notion API to append a block to the page
+    // Wrap Sonnet's response in a callout fence so future tooling can identify
+    // AI-authored sections via regex on the marker lines. Human edits below
+    // [!end info] stay unmarked.
     await fetch(
       `https://api.notion.com/v1/blocks/${capturePageId}/children`,
       {
@@ -723,42 +724,20 @@ Format your response as:
           children: [
             {
               object: "block",
-              type: "divider",
-              divider: {},
-            },
-            {
-              object: "block",
-              type: "heading_3",
-              heading_3: {
+              type: "quote",
+              quote: {
                 rich_text: [
-                  { type: "text", text: { content: "🔍 Research Results" } },
+                  { type: "text", text: { content: "[!info] This is LLM generated material" } },
                 ],
               },
             },
+            ...textToParagraphBlocks(researchText),
             {
               object: "block",
-              type: "paragraph",
-              paragraph: {
+              type: "quote",
+              quote: {
                 rich_text: [
-                  {
-                    type: "text",
-                    text: { content: researchText.slice(0, 2000) },
-                  },
-                ],
-              },
-            },
-            {
-              object: "block",
-              type: "paragraph",
-              paragraph: {
-                rich_text: [
-                  {
-                    type: "text",
-                    text: {
-                      content: `— Auto-researched at ${new Date().toISOString().split("T")[0]}`,
-                    },
-                    annotations: { italic: true, color: "gray" },
-                  },
+                  { type: "text", text: { content: "[!end info]" } },
                 ],
               },
             },
@@ -809,6 +788,26 @@ interface CaptureData {
   autoClassify?: boolean;
 }
 
+// Notion paragraph blocks accept up to 2000 chars per rich_text element.
+// Split on paragraph breaks first, then chunk long paragraphs.
+function textToParagraphBlocks(text: string): any[] {
+  if (!text) return [];
+  const blocks: any[] = [];
+  for (const para of text.split(/\n\n+/)) {
+    if (!para.trim()) continue;
+    for (let i = 0; i < para.length; i += 2000) {
+      blocks.push({
+        object: "block",
+        type: "paragraph",
+        paragraph: {
+          rich_text: [{ type: "text", text: { content: para.slice(i, i + 2000) } }],
+        },
+      });
+    }
+  }
+  return blocks;
+}
+
 async function createNotionCapture(
   env: Env,
   data: CaptureData,
@@ -817,13 +816,12 @@ async function createNotionCapture(
   // Use America/Los_Angeles to match user's timezone
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
 
+  // Body-canonical (2026-04-24): substance lives in page body, NOT the Notes property.
+  // The daemon ranks body above Notes; backfill of legacy Notes-only rows is Phase 2.
   const properties: Record<string, any> = {
     Capture: { title: [{ text: { content: data.title || "Untitled" } }] },
     Type: { select: { name: data.type || "Idea" } },
     Priority: { select: { name: data.priority || "🟢 Low" } },
-    Notes: {
-      rich_text: [{ text: { content: (data.notes || "").slice(0, 2000) } }],
-    },
     "Date Captured": { date: { start: today } },
   };
 
@@ -850,32 +848,38 @@ async function createNotionCapture(
     properties,
   };
 
-  // If there's page content (images, etc.), add it as blocks
+  // Substance → body. Notes property is left unset on new writes.
+  const substanceBlocks = textToParagraphBlocks(data.notes || "");
+
+  // pageContent carries image/audio markdown built upstream
+  const pageContentBlocks: any[] = [];
   if (pageContent) {
-    body.children = pageContent.split("\n\n").map((block) => {
+    for (const block of pageContent.split("\n\n")) {
+      if (!block.trim()) continue;
       if (block.startsWith("![")) {
-        // Image block
         const urlMatch = block.match(/\((.*?)\)/);
         if (urlMatch) {
-          return {
+          pageContentBlocks.push({
             object: "block",
             type: "image",
-            image: {
-              type: "external",
-              external: { url: urlMatch[1] },
-            },
-          };
+            image: { type: "external", external: { url: urlMatch[1] } },
+          });
+          continue;
         }
       }
-      // Text/quote block
-      return {
+      pageContentBlocks.push({
         object: "block",
         type: "paragraph",
         paragraph: {
           rich_text: [{ type: "text", text: { content: block } }],
         },
-      };
-    });
+      });
+    }
+  }
+
+  const children = [...substanceBlocks, ...pageContentBlocks];
+  if (children.length > 0) {
+    body.children = children;
   }
 
   const res = await fetch("https://api.notion.com/v1/pages", {

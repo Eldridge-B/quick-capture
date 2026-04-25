@@ -185,16 +185,17 @@ export default function ActionBar({
         </AnimatedPressable>
       </View>
 
-      {/* Right: capture button */}
+      {/* Right: capture button — stays enabled mid-recording so a tap stops
+           voice, transcribes, and saves in one shot (handled in handleSave). */}
       <AnimatedPressable
         pressScale={0.98}
         style={[
           styles.saveBtn,
-          canSave && !recording && shadows.glow,
-          (!canSave || recording) && styles.saveBtnDisabled,
+          canSave && shadows.glow,
+          !canSave && styles.saveBtnDisabled,
         ]}
         onPress={onSave}
-        disabled={!canSave || recording}
+        disabled={!canSave}
       >
         <Text style={styles.saveBtnText}>
           {busy ? "capturing" : "capture"}
