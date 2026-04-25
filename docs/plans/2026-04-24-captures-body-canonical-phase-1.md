@@ -150,6 +150,10 @@ Effectively a one-tap "stop + transcribe + capture" path that skips the review s
 - Be careful with the React state-update timing: `setText(...)` from `stopVoiceActivity` won't be visible synchronously inside `handleSave`. Compute the final `content` from the awaited transcript directly rather than relying on `text` state after `setText`.
 - Haptic feedback on Capture-mid-recording should fire once at the moment of tap (not after transcription completes), so the user gets immediate confirmation the gesture was received.
 
+**Plan deviation accepted at implementation time (2026-04-24, post-review):**
+- The original brief said *"insert at cursor, with leading space if needed (same merge logic as `handleDictationToggle`)"*. Implementation diverges: `handleSave` **appends** the transcript to the end of `text`, not at cursor position. Reasoning — when the user taps Capture mid-recording they're committing the whole capture; cursor position is irrelevant because the input is about to be cleared by `resetForm()`. Cursor-respecting insert is preserved on the existing two-tap path (`handleDictationToggle`) for users who do want to review/edit before saving.
+- A silent-failure guard was added: if the user taps Capture mid-recording and `stopVoiceActivity` returns no transcript (no speech detected, transcribe failure with no flash), `handleSave` surfaces a "Nothing captured — tap mic and try again" flash instead of silently returning after the haptic.
+
 **Out of scope for this addition:** changing the mic-button behavior, changing the Capture button's appearance during recording (no special "stop & save" icon — same Capture button, just functional while recording).
 
 ---

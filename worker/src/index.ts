@@ -20,6 +20,13 @@
  *   ANTHROPIC_API_KEY  — Anthropic API key (for background research on Lookup captures)
  */
 
+import {
+  NOTION_MAX_BLOCKS_PER_REQUEST,
+  NotionBlock,
+  textToParagraphBlocks,
+  wrapInLLMFence,
+} from "./notion-blocks";
+
 interface Env {
   NOTION_API_KEY: string;
   DEEPGRAM_API_KEY: string;
@@ -708,43 +715,11 @@ Format your response as:
 
     if (!researchText) return;
 
-    // Wrap Sonnet's response in a callout fence so future tooling can identify
+    // Wrap Sonnet's response in a fence so future tooling can identify
     // AI-authored sections via regex on the marker lines. Human edits below
-    // [!end info] stay unmarked.
-    await fetch(
-      `https://api.notion.com/v1/blocks/${capturePageId}/children`,
-      {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${env.NOTION_API_KEY}`,
-          "Notion-Version": NOTION_API_VERSION,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          children: [
-            {
-              object: "block",
-              type: "quote",
-              quote: {
-                rich_text: [
-                  { type: "text", text: { content: "[!info] This is LLM generated material" } },
-                ],
-              },
-            },
-            ...textToParagraphBlocks(researchText),
-            {
-              object: "block",
-              type: "quote",
-              quote: {
-                rich_text: [
-                  { type: "text", text: { content: "[!end info]" } },
-                ],
-              },
-            },
-          ],
-        }),
-      }
-    );
+    // [!end info] stay unmarked. appendBlocksToPage chunks at 100 blocks so a
+    // long Sonnet response can't blow past Notion's per-request ceiling.
+    await appendBlocksToPage(env, capturePageId, wrapInLLMFence(researchText));
 
     // Update the Next Step field to indicate research is done
     await fetch(`https://api.notion.com/v1/pages/${capturePageId}`, {
@@ -788,24 +763,33 @@ interface CaptureData {
   autoClassify?: boolean;
 }
 
-// Notion paragraph blocks accept up to 2000 chars per rich_text element.
-// Split on paragraph breaks first, then chunk long paragraphs.
-function textToParagraphBlocks(text: string): any[] {
-  if (!text) return [];
-  const blocks: any[] = [];
-  for (const para of text.split(/\n\n+/)) {
-    if (!para.trim()) continue;
-    for (let i = 0; i < para.length; i += 2000) {
-      blocks.push({
-        object: "block",
-        type: "paragraph",
-        paragraph: {
-          rich_text: [{ type: "text", text: { content: para.slice(i, i + 2000) } }],
-        },
-      });
+// Append blocks to an existing Notion page in 100-block chunks (Notion's
+// per-request ceiling). Returns immediately if there are no overflow blocks.
+async function appendBlocksToPage(
+  env: Env,
+  pageId: string,
+  blocks: NotionBlock[]
+): Promise<void> {
+  for (let i = 0; i < blocks.length; i += NOTION_MAX_BLOCKS_PER_REQUEST) {
+    const chunk = blocks.slice(i, i + NOTION_MAX_BLOCKS_PER_REQUEST);
+    const res = await fetch(`https://api.notion.com/v1/blocks/${pageId}/children`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${env.NOTION_API_KEY}`,
+        "Notion-Version": NOTION_API_VERSION,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ children: chunk }),
+    });
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error(
+        `[appendBlocks] Notion PATCH failed (chunk ${i}-${i + chunk.length}):`,
+        errBody
+      );
+      throw new Error(`Notion append failed (${res.status}): ${errBody}`);
     }
   }
-  return blocks;
 }
 
 async function createNotionCapture(
@@ -877,9 +861,14 @@ async function createNotionCapture(
     }
   }
 
-  const children = [...substanceBlocks, ...pageContentBlocks];
-  if (children.length > 0) {
-    body.children = children;
+  // Notion caps create-page requests at 100 children. For longer captures
+  // (e.g. share-intent of a long article), send the first 100 in the create
+  // request and append the overflow via PATCH /blocks/{id}/children below.
+  const allChildren = [...substanceBlocks, ...pageContentBlocks];
+  const initialChildren = allChildren.slice(0, NOTION_MAX_BLOCKS_PER_REQUEST);
+  const overflowChildren = allChildren.slice(NOTION_MAX_BLOCKS_PER_REQUEST);
+  if (initialChildren.length > 0) {
+    body.children = initialChildren;
   }
 
   const res = await fetch("https://api.notion.com/v1/pages", {
@@ -899,6 +888,14 @@ async function createNotionCapture(
   }
 
   const page = await res.json<{ id: string; url: string }>();
+
+  if (overflowChildren.length > 0) {
+    console.log(
+      `[createNotionCapture] Appending ${overflowChildren.length} overflow blocks (capture exceeded ${NOTION_MAX_BLOCKS_PER_REQUEST} blocks).`
+    );
+    await appendBlocksToPage(env, page.id, overflowChildren);
+  }
+
   return { id: page.id, url: page.url };
 }
 

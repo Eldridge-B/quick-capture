@@ -414,8 +414,9 @@ export default function CaptureScreen() {
     // In-recording Capture: tap stops voice, transcribes, then saves in one shot.
     // Fire haptic immediately on tap so the user gets confirmation before the
     // transcribe roundtrip — separate from the haptic below for normal saves.
+    const attemptedVoice = dictatingRef.current || recordingRef.current;
     let appendedTranscript: string | undefined;
-    if (dictatingRef.current || recordingRef.current) {
+    if (attemptedVoice) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       appendedTranscript = await stopVoiceActivity();
     }
@@ -423,6 +424,10 @@ export default function CaptureScreen() {
     // Compute final text from current text + any newly transcribed content.
     // Don't rely on `text` state after setText — setState is async; use the
     // local merged value for both setText (UI) and the save payload.
+    // End-append (not cursor-insert) is intentional: when the user taps Capture
+    // mid-recording they're committing the whole capture, so cursor position
+    // is irrelevant. The two-tap flow (mic→edit→capture) still uses cursor
+    // insertion via handleDictationToggle.
     let finalText = text;
     if (appendedTranscript) {
       const needsSpace =
@@ -435,7 +440,17 @@ export default function CaptureScreen() {
 
     const content = finalText.trim();
     const hasContent = content.length > 0 || attachments.length > 0;
-    if (!hasContent) return;
+    if (!hasContent) {
+      // User tapped Capture mid-recording but nothing usable came back.
+      // stopVoiceActivity already shows a flash for transcribe failures;
+      // surface our own for the silent-empty case (e.g. no speech detected).
+      // showFlash overwrites the existing flash, which is desirable here:
+      // "Nothing captured" is the actionable message at this point.
+      if (attemptedVoice) {
+        showFlash("error", "Nothing captured — tap mic and try again");
+      }
+      return;
+    }
 
     Keyboard.dismiss();
     setSaving(true);
